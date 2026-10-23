@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#080d18" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="像素湾城市物体图鉴 — 建筑、区域、公园、载具、街道设施、植被与滨水物体的完整三维档案。"
+    />
+    <title>城市物体图鉴 · PIXEL BAY OBJECT ARCHIVE</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2310192b'/%3E%3Crect x='6' y='17' width='5' height='9' fill='%2373c9bd'/%3E%3Crect x='13' y='9' width='6' height='17' fill='%23f6e8cb'/%3E%3Crect x='21' y='13' width='5' height='13' fill='%23e16f5b'/%3E%3Crect x='4' y='27' width='24' height='2' fill='%23ffd166'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/src/catalog.css" />
+  </head>
+  <body>
+    <div class="catalog-app" id="catalogApp">
+      <div class="page-fx" aria-hidden="true"></div>
+
+      <header class="masthead">
+        <div class="masthead-top">
+          <a class="return-link" href="/" aria-label="返回像素湾城市">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M12.5 8H3.5M3.5 8l4-4M3.5 8l4 4" />
+            </svg>
+            <span><b>返回城市</b><em>RETURN TO CITY</em></span>
+          </a>
+          <div class="archive-status">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span>ARCHIVE ONLINE</span>
+            <span class="status-rule" aria-hidden="true"></span>
+            <span>INVENTORY <b id="statusCount">000 / 099</b></span>
+          </div>
+        </div>
+
+        <div class="hero">
+          <div class="hero-copy">
+            <p class="kicker">PIXEL BAY / OBJECT ARCHIVE · VOL. 01</p>
+            <h1>城市物体图鉴</h1>
+            <p class="hero-lead">
+              <span data-total-count>99</span> 件构成像素湾的物体，从坡顶小屋到环岛渡轮。每一件都经过建模、打光与登记，
+              以低分辨率影像收录在这份档案里。
+            </p>
+            <div class="hero-stats" aria-label="图鉴统计">
+              <div class="hero-stat">
+                <span>OBJECTS</span>
+                <strong data-total-count>99</strong>
+                <em>收录物体</em>
+              </div>
+              <div class="hero-stat">
+                <span>CATEGORIES</span>
+                <strong data-category-count>10</strong>
+                <em>分类</em>
+              </div>
+              <div class="hero-stat">
+                <span>BUILDINGS</span>
+                <strong data-building-count>31</strong>
+                <em>建筑型号</em>
+              </div>
+              <div class="hero-stat">
+                <span>DISTRICTS</span>
+                <strong data-district-count>10</strong>
+                <em>街区切片</em>
+              </div>
+            </div>
+          </div>
+
+          <aside class="hero-index panel" aria-label="档案索引">
+            <div class="hero-index-top">
+              <span>CATALOGUE</span>
+              <span id="catalogueCode">PB–099</span>
+            </div>
+            <div class="hero-count">
+              <strong id="heroCount">99</strong>
+              <span>OBJECTS<br />INDEXED</span>
+            </div>
+            <div class="hero-categories" id="heroCategories"></div>
+            <p class="hero-index-note">共享 WebGL 渲染器 / 192×144 PIXEL CAPTURE</p>
+            <div class="index-scan" aria-hidden="true"></div>
+            <div class="info-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          </aside>
+        </div>
+
+        <div class="masthead-coord" aria-hidden="true">
+          <span>LAT 22.31 N / LON 114.17 E</span>
+          <span>GRID 07 × 07</span>
+          <span>ARCHIVE STATUS <b>COMPLETE</b></span>
+          <span>PIXEL BAY MUNICIPAL WORKS</span>
+        </div>
+      </header>
+
+      <nav class="filter-rail" aria-label="按分类筛选">
+        <div class="filter-inner" role="group" aria-label="分类筛选">
+          <span class="filter-label">FILTER / 筛选</span>
+          <button class="filter-chip is-active" type="button" data-group="all" aria-pressed="true">
+            <i style="--chip-accent: #f5e9d3" aria-hidden="true"></i>
+            <span>全部</span>
+            <b>99</b>
+          </button>
+          <span class="filter-result" id="filterResult">显示 99 / 99</span>
+        </div>
+      </nav>
+
+      <main class="catalog-main" id="catalogMain">
+        <div class="backdrop-grid" aria-hidden="true"></div>
+        <div class="archive-notice" id="archiveNotice" hidden></div>
+        <div id="catalogSections"></div>
+
+        <footer class="catalog-footer">
+          <div class="footer-mark" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div class="footer-copy">
+            <p>PIXEL BAY / OBJECT ARCHIVE</p>
+            <p>城市物体图鉴 · <span data-total-count>99</span> OBJECTS · <span data-category-count>10</span> CATEGORIES</p>
+          </div>
+          <a class="return-link footer-return" href="/">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M12.5 8H3.5M3.5 8l4-4M3.5 8l4 4" />
+            </svg>
+            <span><b>回到城市</b><em>BACK TO PIXEL BAY</em></span>
+          </a>
+        </footer>
+      </main>
+
+      <div class="loader" id="loader" role="status" aria-live="polite">
+        <div class="loader-shell">
+          <div class="loader-brand panel">
+            <div class="loader-head">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span>PIXEL BAY / ARCHIVE BOOT</span>
+              <b>RENDER 01</b>
+            </div>
+            <p class="kicker">GENERATING PIXEL THUMBNAILS</p>
+            <h2>正在扫描城市物体</h2>
+            <p class="loader-copy" id="loaderCopy">
+              单一离屏渲染器正在为每件物体拍摄等轴缩略图。
+            </p>
+            <div
+              class="loader-progress"
+              id="loaderProgress"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="99"
+              aria-valuenow="0"
+              aria-label="缩略图生成进度"
+            >
+              <i id="loaderFill"></i>
+            </div>
+            <div class="loader-meta">
+              <span id="loaderCount">000 / 099</span>
+              <b id="loaderPercent">0%</b>
+            </div>
+            <ul class="loader-groups" id="loaderGroups"></ul>
+            <p class="loader-current">
+              <span>CURRENT</span>
+              <b id="loaderCurrent">—</b>
+            </p>
+            <div class="index-scan" aria-hidden="true"></div>
+            <div class="info-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="inspector" id="inspector" hidden aria-hidden="true">
+        <div class="inspector-backdrop" data-close></div>
+        <section
+          class="inspector-panel panel"
+          id="inspectorPanel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inspectorTitle"
+          aria-describedby="inspectorDesc"
+        >
+          <button class="inspector-close" type="button" data-close aria-label="关闭物体详情">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
+          </button>
+
+          <div class="inspector-stage" id="inspectorStage">
+            <canvas id="inspectorCanvas" aria-label="可拖拽旋转的三维物体模型"></canvas>
+            <img class="stage-fallback" id="stageFallback" alt="" hidden />
+            <div class="stage-top">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span>LIVE MODEL / 实时模型</span>
+              <span id="stageCode">NO. 001</span>
+            </div>
+            <div class="stage-hint" id="stageHint">拖动旋转 · 滚轮缩放 · 自动环绕</div>
+            <div class="stage-note" id="stageNote" hidden>
+              此设备无法启动实时 3D 查看器，显示静态缩略图。
+            </div>
+          </div>
+
+          <div class="inspector-info" id="inspectorInfo">
+            <p class="inspector-kicker">
+              <i id="inspectorSwatch" aria-hidden="true"></i>
+              <span id="inspectorGroup">ARCHITECTURE</span>
+            </p>
+            <p class="inspector-number" id="inspectorNumber">NO. 001 / 099</p>
+            <h2 id="inspectorTitle">坡顶小屋</h2>
+            <p class="inspector-en" id="inspectorEn">GABLE COTTAGE</p>
+            <p class="inspector-desc" id="inspectorDesc"></p>
+            <div class="inspector-family" id="inspectorFamily" hidden></div>
+            <dl class="inspector-facts" id="inspectorFacts"></dl>
+            <div class="inspector-tags" id="inspectorTags"></div>
+            <p class="inspector-hint">ESC 关闭 · 拖动旋转 · 滚轮缩放</p>
+            <div class="info-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          </div>
+        </section>
+      </div>
+
+      <noscript>
+        <div class="no-script">城市物体图鉴需要启用 JavaScript 才能生成三维缩略图。</div>
+      </noscript>
+    </div>
+    <script type="module" src="/src/catalog-page.js"></script>
+  </body>
+</html>
