@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>摩天大楼建模对照 · SKYSCRAPER STUDY</title>
+    <style>
+      :root {
+        --bg: #0a1120;
+        --panel: #121c2c;
+        --line: #26374c;
+        --ink: #f2e9d8;
+        --muted: #93a7b8;
+        --accent: #79d6c8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 28px 32px 40px;
+        background: radial-gradient(circle at 30% 0%, #17283c 0%, var(--bg) 58%);
+        color: var(--ink);
+        font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+      }
+      header.title {
+        margin-bottom: 20px;
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+      header.title h1 {
+        font-size: 22px;
+        letter-spacing: 0.04em;
+        margin: 0;
+      }
+      header.title p {
+        margin: 0;
+        color: var(--muted);
+        font-family: Consolas, "Cascadia Mono", monospace;
+        font-size: 12px;
+      }
+      #sheet {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(calc(var(--thumb-w) + 16px), 1fr));
+        gap: 18px;
+        align-items: start;
+      }
+      .cell {
+        margin: 0;
+        background: linear-gradient(180deg, #16233a 0%, #0c1524 100%);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        padding: 10px 10px 12px;
+      }
+      .cell.failed {
+        outline: 2px solid #e05555;
+      }
+      .frame {
+        display: flex;
+        justify-content: center;
+        background: radial-gradient(circle at 50% 42%, #23374f 0%, #0d1726 72%);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .frame img {
+        display: block;
+        width: var(--thumb-w);
+        height: var(--thumb-h);
+        image-rendering: auto;
+      }
+      figcaption {
+        display: grid;
+        gap: 2px;
+        padding: 8px 2px 0;
+      }
+      figcaption b {
+        font-size: 15px;
+        letter-spacing: 0.02em;
+      }
+      figcaption span {
+        font-size: 11px;
+        color: var(--accent);
+        font-family: Consolas, "Cascadia Mono", monospace;
+        letter-spacing: 0.04em;
+      }
+      figcaption small {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      #status {
+        margin-top: 18px;
+        font-family: Consolas, "Cascadia Mono", monospace;
+        font-size: 11px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="title">
+      <h1>摩天大楼建模对照</h1>
+      <p>SKYSCRAPER STUDY · 与图鉴缩略图共用 ShowcaseStudio · 只读渲染脚本</p>
+    </header>
+    <div id="sheet"></div>
+    <p id="status">rendering…</p>
+    <script type="module" src="./study.js"></script>
+  </body>
+</html>

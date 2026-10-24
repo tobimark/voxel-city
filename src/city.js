@@ -8,27 +8,14 @@ import {
   PARKS,
   SKYSCRAPERS,
   VEHICLES,
-  transformDistrictLayout,
 } from "./object-catalog.js";
+import { createCityPlan } from "./city-plan.js";
 
-const GRID_SIZE = 5;
-const ROAD_LINES = Array.from({ length: GRID_SIZE + 1 }, (_, index) => -20 + index * 8);
-const BLOCK_CENTERS = Array.from({ length: GRID_SIZE }, (_, index) => -16 + index * 8);
-const CITY_EXTENT = 21;
-const PLATEAU_SIZE = 46.4;
 const BLOCK_TOP = 0.39;
 const ROAD_TOP = 0.09;
 const WATER_LEVEL = -1.12;
 const FLOOR_HEIGHT = 0.42;
 const TAU = Math.PI * 2;
-
-const CITY_ZONE_LAYOUT = [
-  ["oldtown", "residential", "green", "residential", "academic"],
-  ["oldtown", "creative", "commercial", "civic", "academic"],
-  ["residential", "commercial", "downtown", "commercial", "harbor"],
-  ["green", "civic", "green", "creative", "amusement"],
-  ["green", "green", "harbor", "industrial", "construction"],
-];
 
 const AMUSEMENT_DISTRICT = {
   id: "amusement",
@@ -51,66 +38,9 @@ const DISTRICT_GROUND = {
   amusement: "#c3a77e",
 };
 
-const DISTRICT_LOTS = {
-  residential: [
-    { x: -1.3, z: -1.28, w: 1.65, d: 1.55 },
-    { x: 1.3, z: -1.28, w: 1.65, d: 1.55 },
-    { x: -1.3, z: 1.28, w: 1.65, d: 1.55 },
-    { x: 1.3, z: 1.28, w: 1.65, d: 1.55 },
-  ],
-  oldtown: [
-    { x: -1.52, z: -1.2, w: 0.84, d: 1.5 },
-    { x: -0.5, z: -1.18, w: 0.84, d: 1.5 },
-    { x: 0.62, z: -1.18, w: 0.84, d: 1.5 },
-    { x: 1.62, z: -1.16, w: 0.84, d: 1.5 },
-    { x: -0.8, z: 1.4, w: 1.9, d: 1.4, role: "clocktower" },
-  ],
-  commercial: [
-    { x: -1.32, z: -1.18, w: 1.95, d: 1.7 },
-    { x: 1.3, z: -1.16, w: 1.85, d: 1.65 },
-    { x: -1.12, z: 1.3, w: 2.05, d: 1.6, role: "market" },
-  ],
-  creative: [
-    { x: -1.32, z: -1.25, w: 1.55, d: 1.5 },
-    { x: 1.18, z: -1.2, w: 1.55, d: 1.5 },
-    { x: -1.08, z: 1.28, w: 1.8, d: 1.5 },
-  ],
-  downtown: [
-    { x: -0.04, z: -0.05, w: 4.3, d: 3.9, role: "skyscraper" },
-  ],
-  civic: [
-    { x: -0.65, z: -0.58, w: 2.6, d: 2.2, role: "civic" },
-    { x: 1.62, z: 1.42, w: 1.66, d: 1.45 },
-  ],
-  academic: [
-    { x: -0.95, z: -0.72, w: 2.45, d: 1.95, role: "school" },
-    { x: 1.4, z: 1.32, w: 1.75, d: 1.55 },
-    { x: -1.5, z: 1.45, w: 1.5, d: 1.25 },
-  ],
-  industrial: [
-    { x: -0.9, z: -0.76, w: 2.5, d: 2.05, role: "industrial" },
-    { x: 1.58, z: 1.24, w: 1.82, d: 1.65 },
-    { x: -1.6, z: 1.52, w: 1.5, d: 1.3 },
-  ],
-  harbor: [
-    { x: -1.1, z: -0.9, w: 2.35, d: 1.9, role: "warehouse" },
-    { x: 1.45, z: -0.8, w: 1.8, d: 1.65, role: "lighthouse" },
-    { x: -0.8, z: 1.45, w: 1.95, d: 1.35 },
-  ],
-};
+;
 
-const SPECIAL_LOT_LAYOUTS = {
-  "b-clocktower": ["oldtown"],
-  "b-lighthouse": ["harbor"],
-  "b-observation": ["downtown"],
-  "b-skygarden": ["downtown"],
-  "b-cityhall": ["civic"],
-  "b-museum": ["civic"],
-  "b-school": ["academic"],
-  "b-market": ["commercial", "harbor"],
-  "b-energy": ["industrial"],
-  "b-warehouse": ["industrial", "harbor"],
-};
+;
 
 const BUILDING_COLORS = [
   "#e6d5b8",
@@ -229,6 +159,10 @@ function mulberry32(seed) {
 
 function rand(rng, min, max) {
   return min + (max - min) * rng();
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function choose(rng, list) {
@@ -350,26 +284,38 @@ function makeWaterMaterial() {
   });
 }
 
-function makeLoopCurve(cx, cz, half = 3.54, radius = 0.62, y = ROAD_TOP + 0.012) {
+function makeLoopCurve(
+  cx,
+  cz,
+  half = 3.54,
+  radius = 0.62,
+  y = ROAD_TOP + 0.012,
+  halfZ = half,
+  rotation = 0
+) {
   const points = [];
+  const cosR = Math.cos(rotation);
+  const sinR = Math.sin(rotation);
   const addCorner = (cornerX, cornerZ, start, end) => {
     const steps = 5;
     for (let i = 0; i <= steps; i += 1) {
       const angle = start + ((end - start) * i) / steps;
+      const localX = cornerX + Math.cos(angle) * radius;
+      const localZ = cornerZ + Math.sin(angle) * radius;
       points.push(
         new THREE.Vector3(
-          cx + cornerX + Math.cos(angle) * radius,
+          cx + localX * cosR + localZ * sinR,
           y,
-          cz + cornerZ + Math.sin(angle) * radius
+          cz - localX * sinR + localZ * cosR
         )
       );
     }
   };
 
-  addCorner(half - radius, -half + radius, -Math.PI / 2, 0);
-  addCorner(half - radius, half - radius, 0, Math.PI / 2);
-  addCorner(-half + radius, half - radius, Math.PI / 2, Math.PI);
-  addCorner(-half + radius, -half + radius, Math.PI, (Math.PI * 3) / 2);
+  addCorner(half - radius, -halfZ + radius, -Math.PI / 2, 0);
+  addCorner(half - radius, halfZ - radius, 0, Math.PI / 2);
+  addCorner(-half + radius, halfZ - radius, Math.PI / 2, Math.PI);
+  addCorner(-half + radius, -halfZ + radius, Math.PI, (Math.PI * 3) / 2);
 
   const curve = new THREE.CatmullRomCurve3(points, true, "centripetal");
   curve.arcLengthDivisions = 160;
@@ -382,6 +328,7 @@ export function randomCitySeed() {
 
 export function createCity({ seed = randomCitySeed() } = {}) {
   const rng = mulberry32(seed);
+  const plan = createCityPlan(rng);
   const group = new THREE.Group();
   group.name = "PixelBayCity";
 
@@ -393,6 +340,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
   const cars = [];
   const boats = [];
   const birds = [];
+  const trains = [];
   const fountains = [];
   const beacons = [];
   const rotors = [];
@@ -453,7 +401,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     return materialCache.get(key);
   };
 
-  const asphaltMat = standard("#3b424e", { roughness: 1 });
+  const asphaltMat = standard("#474e59", { roughness: 1 });
   const sidewalkMat = standard("#c5bb9f");
   const plazaMat = standard("#cbbf9f");
   const grassMat = standard("#7c9d59");
@@ -522,8 +470,16 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     roughness: 0.5,
     metalness: 0,
   });
+  const towerWindowMaterial = new THREE.MeshStandardMaterial({
+    color: "#4d6871",
+    emissive: "#ffc173",
+    emissiveIntensity: 0.04,
+    roughness: 0.3,
+    metalness: 0.28,
+  });
   materials.add(darkWindowMaterial);
   materials.add(litWindowMaterial);
+  materials.add(towerWindowMaterial);
 
   const outlineMaterial = new THREE.LineBasicMaterial({
     color: "#1b2430",
@@ -1122,141 +1078,131 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     return record;
   }
 
-  function addCivicBlock(blockGroup, blockX, blockZ, label) {
-    const feature = new THREE.Group();
-    blockGroup.add(feature);
-
-    const wallColor = choose(rng, CIVIC_COLORS);
-    const wallMaterial = standard(wallColor);
-    const trimMaterial = standard("#c9bfa8");
-    const hallWidth = 3.5;
-    const hallDepth = 1.7;
-    const hallZ = -0.88;
-    const hallBase = 0.24;
-    const hallHeight = 1.06;
-
-    addBox(feature, hallWidth + 0.8, 0.12, hallDepth + 1.0, trimMaterial, 0, 0.06, hallZ + 0.14);
-    addBox(feature, hallWidth + 0.46, 0.12, hallDepth + 0.66, stoneMat, 0, 0.18, hallZ + 0.1);
-    for (let i = 0; i < 3; i += 1) {
-      addBox(
-        feature,
-        hallWidth - 0.7 - i * 0.5,
-        0.08,
-        0.34,
-        stoneMat,
-        0,
-        0.1 + i * 0.08,
-        hallZ + hallDepth / 2 + 0.58 - i * 0.26
-      );
-    }
-
-    addBox(feature, hallWidth, hallHeight, hallDepth, wallMaterial, 0, hallBase + hallHeight / 2, hallZ);
-    addBox(feature, hallWidth - 0.28, 0.24, 0.035, glassMat, 0, hallBase + hallHeight * 0.42, hallZ + hallDepth / 2 + 0.02, {
-      cast: false,
-    });
-    for (let i = 0; i < 6; i += 1) {
-      addBox(
-        feature,
-        0.13,
-        hallHeight * 0.82,
-        0.13,
-        whiteMat,
-        -hallWidth / 2 + 0.34 + (i * (hallWidth - 0.68)) / 5,
-        hallBase + hallHeight * 0.41,
-        hallZ + hallDepth / 2 + 0.16
-      );
-    }
-
-    addBox(feature, hallWidth + 0.34, 0.15, hallDepth + 0.32, trimMaterial, 0, hallBase + hallHeight + 0.075, hallZ + 0.02);
-    addPyramid(feature, hallWidth + 0.1, 0.36, hallDepth + 0.22, trimMaterial, 0, hallBase + hallHeight + 0.15, hallZ);
-    addCylinder(feature, 0.52, 0.2, domeMat, 0, hallBase + hallHeight + 0.62, hallZ);
-    const domeBase = hallBase + hallHeight + 0.72;
-    addSphere(feature, 0.62, domeMat, 0, domeBase, hallZ, 0.72);
-    addCylinder(feature, 0.07, 0.22, whiteMat, 0, domeBase + 0.5, hallZ);
-    addBox(feature, 0.06, 0.06, 0.06, beaconMat, 0, domeBase + 0.63, hallZ, {
-      cast: false,
-      receive: false,
-    });
-
-    addBox(feature, 2.9, 0.035, 1.9, pathMat, 0, 0.028, 2.02, { cast: false });
-    addCylinder(feature, 0.44, 0.1, stoneMat, 1.72, 0.05, 1.72);
-    addCylinder(feature, 0.34, 0.02, waterStillMat, 1.72, 0.11, 1.72, { cast: false });
-
-    for (let i = 0; i < 3; i += 1) {
-      const poleX = -2.08 + i * 0.3;
-      addBox(feature, 0.035, 1.16, 0.035, whiteMat, poleX, 0.58, 2.12);
-      addBox(feature, 0.26, 0.14, 0.015, standard(["#e8735f", "#6fc3b2", "#f2b65c"][i]), poleX + 0.14, 1.06, 2.12, {
+  function addIsland() {
+    for (const rect of plan.island.land) {
+      const width = rect.x1 - rect.x0;
+      const depth = rect.z1 - rect.z0;
+      const cx = (rect.x0 + rect.x1) / 2;
+      const cz = (rect.z0 + rect.z1) / 2;
+      addBox(group, width, 0.5, depth, deckMat, cx, -0.25, cz, {
+        cast: false,
+        receive: true,
+      });
+      addBox(group, width - 0.24, 0.9, depth - 0.24, soilMat, cx, -0.9, cz, {
         cast: false,
         receive: false,
       });
+      addBox(group, width - 0.72, 1.4, depth - 0.72, rockMat, cx, -1.9, cz, {
+        cast: false,
+        receive: false,
+      });
+      addBox(group, width - 0.5, 0.05, depth - 0.5, asphaltMat, cx, 0.025, cz, {
+        cast: false,
+        receive: true,
+      });
     }
 
-    addBench(feature, -1.55, 1.86, 0, BLOCK_TOP);
-    addBench(feature, 1.55, 2.42, Math.PI, BLOCK_TOP);
-    addTree(feature, 2.24, -2.08, 0.68, BLOCK_TOP);
-    addTree(feature, -2.24, -2.08, 0.62, BLOCK_TOP);
-    addBush(feature, 2.24, 1.14, 0.8, BLOCK_TOP);
-    addFlowers(feature, -1.2, 2.3, BLOCK_TOP);
+    for (const edge of plan.island.edges) {
+      const horizontal = Math.abs(edge.x1 - edge.x0) > Math.abs(edge.z1 - edge.z0);
+      const length = horizontal ? Math.abs(edge.x1 - edge.x0) : Math.abs(edge.z1 - edge.z0);
+      const cx = (edge.x0 + edge.x1) / 2;
+      const cz = (edge.z0 + edge.z1) / 2;
+      const nx = edge.nx;
+      const nz = edge.nz;
+      const trimWidth = horizontal ? length : 0.42;
+      const trimDepth = horizontal ? 0.42 : length;
+      addBox(
+        group,
+        trimWidth,
+        0.12,
+        trimDepth,
+        trimMat,
+        cx - nx * 0.21,
+        0.06,
+        cz - nz * 0.21,
+        { cast: false }
+      );
 
-    const record = {
-      id: `${label}-civic`,
-      name: makeName("civic", label),
-      kind: "civic",
-      label,
-      floors: 3,
-      detailLabel: "办事窗口",
-      detailValue: `${Math.round(rand(rng, 18, 32))} 个`,
-      height: Math.round((BLOCK_TOP + domeBase + 0.66) * 3.2 * 10) / 10,
-      population: 0,
-      jobs: Math.round(rand(rng, 120, 180)),
-      occupancy: Math.round(rand(rng, 0.86, 0.99) * 100),
-      year: 2032 + Math.floor(rng() * 10),
-      color: wallColor,
-      note: choose(rng, SPECIAL_NOTES.civic),
-      address: `BLOCK ${label} · 像素湾${blockX > 0 ? "东" : "西"}区`,
-      root: feature,
-    };
-    addBuildingInfo(feature, record);
-    return record;
-  }
+      if (edge.kind === "quay") {
+        addBox(
+          group,
+          horizontal ? length : 0.34,
+          1.7,
+          horizontal ? 0.34 : length,
+          stoneMat,
+          cx - nx * 0.17,
+          -0.55,
+          cz - nz * 0.17,
+          { cast: false }
+        );
+        addBox(
+          group,
+          horizontal ? length + 0.12 : 0.48,
+          0.16,
+          horizontal ? 0.48 : length + 0.12,
+          trimMat,
+          cx - nx * 0.13,
+          0.38,
+          cz - nz * 0.13,
+          { cast: false }
+        );
+        addBox(
+          group,
+          horizontal ? length : 1.55,
+          0.035,
+          horizontal ? 1.55 : length,
+          stoneMat,
+          cx - nx * 0.9,
+          0.052,
+          cz - nz * 0.9,
+          { cast: false }
+        );
+      }
 
-  function addIsland() {
-    addBox(group, PLATEAU_SIZE, 0.5, PLATEAU_SIZE, deckMat, 0, -0.25, 0, {
-      cast: false,
-      receive: true,
-    });
-    addBox(group, PLATEAU_SIZE - 0.4, 0.9, PLATEAU_SIZE - 0.4, soilMat, 0, -0.9, 0, {
-      cast: false,
-      receive: false,
-    });
-    addBox(group, PLATEAU_SIZE - 1.2, 1.4, PLATEAU_SIZE - 1.2, rockMat, 0, -1.9, 0, {
-      cast: false,
-      receive: false,
-    });
+      addBox(
+        group,
+        horizontal ? length + 0.5 : 0.42,
+        0.025,
+        horizontal ? 0.42 : length + 0.5,
+        shoreMat,
+        cx + nx * 0.28,
+        WATER_LEVEL + 0.012,
+        cz + nz * 0.28,
+        { cast: false, receive: false }
+      );
 
-    const trim = PLATEAU_SIZE / 2 - 0.35;
-    addBox(group, PLATEAU_SIZE + 0.6, 0.12, 0.42, trimMat, 0, 0.06, trim);
-    addBox(group, PLATEAU_SIZE + 0.6, 0.12, 0.42, trimMat, 0, 0.06, -trim);
-    addBox(group, 0.42, 0.12, PLATEAU_SIZE + 0.6, trimMat, trim, 0.06, 0);
-    addBox(group, 0.42, 0.12, PLATEAU_SIZE + 0.6, trimMat, -trim, 0.06, 0);
-
-    const shore = PLATEAU_SIZE / 2 + 0.15;
-    addBox(group, PLATEAU_SIZE + 0.85, 0.02, 0.34, shoreMat, 0, WATER_LEVEL + 0.008, shore, {
-      cast: false,
-      receive: false,
-    });
-    addBox(group, PLATEAU_SIZE + 0.85, 0.02, 0.34, shoreMat, 0, WATER_LEVEL + 0.008, -shore, {
-      cast: false,
-      receive: false,
-    });
-    addBox(group, 0.34, 0.02, PLATEAU_SIZE + 0.85, shoreMat, shore, WATER_LEVEL + 0.008, 0, {
-      cast: false,
-      receive: false,
-    });
-    addBox(group, 0.34, 0.02, PLATEAU_SIZE + 0.85, shoreMat, -shore, WATER_LEVEL + 0.008, 0, {
-      cast: false,
-      receive: false,
-    });
+      const step = edge.kind === "quay" ? 3.0 : 4.2;
+      const along = length - 2.2;
+      for (let offset = -along / 2; offset <= along / 2; offset += step) {
+        const px = horizontal ? cx + offset : cx - nx * 0.95;
+        const pz = horizontal ? cz - nz * 0.95 : cz + offset;
+        const rotation = nz > 0 ? 0 : nz < 0 ? Math.PI : nx > 0 ? Math.PI / 2 : -Math.PI / 2;
+        if (edge.kind === "quay") {
+          addBench(group, px, pz, rotation, 0.03);
+        }
+        if (Math.abs(offset) < along / 2 - 0.4) {
+          addStreetLamp(
+            horizontal ? px : cx - nx * 1.15,
+            horizontal ? cz - nz * 1.15 : pz,
+            0.03,
+            0.82
+          );
+        }
+      }
+      if (edge.kind === "quay") {
+        for (let offset = -along / 2; offset <= along / 2; offset += 2.6) {
+          const species = nx > 0 ? "palm" : "broadleaf";
+          addTree(
+            group,
+            horizontal ? cx + offset : cx - nx * 1.65,
+            horizontal ? cz - nz * 1.65 : cz + offset,
+            rand(rng, 0.46, 0.62),
+            0.03,
+            species
+          );
+        }
+      }
+    }
 
     waterMaterial = makeWaterMaterial();
     materials.add(waterMaterial);
@@ -1267,140 +1213,297 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     waterMesh.renderOrder = -1;
     group.add(waterMesh);
 
-    // Promenade greenery and seats frame the larger island.
-    const promenade = PLATEAU_SIZE / 2 - 1.15;
-    for (const [x, z, scale, species] of [
-      [-promenade, -13.2, 0.78, "broadleaf"],
-      [promenade, 12.1, 0.72, "palm"],
-      [-12.4, promenade, 0.75, "conifer"],
-      [13.4, -promenade, 0.68, "broadleaf"],
-      [-promenade, 11.8, 0.64, "palm"],
-      [promenade, -10.6, 0.62, "broadleaf"],
-      [-8.2, promenade, 0.7, "cherry"],
-      [9.6, -promenade, 0.66, "conifer"],
-      [-promenade, 2.4, 0.56, "cherry"],
-      [promenade, 3.1, 0.58, "broadleaf"],
-    ]) {
-      addTree(group, x, z, scale, 0.02, species);
-    }
-    for (const [x, z, rotation] of [
-      [-promenade, 1.4, Math.PI / 2],
-      [promenade, -1.3, -Math.PI / 2],
-      [1.2, promenade, Math.PI],
-      [-1.2, -promenade, 0],
-      [-promenade, -7.8, Math.PI / 2],
-      [promenade, 7.4, -Math.PI / 2],
-    ]) {
-      addBench(group, x, z, rotation, 0.01);
-    }
-    for (const [x, z] of [
-      [-promenade, -4.2],
-      [promenade, 4.2],
-      [-4.2, promenade],
-      [4.2, -promenade],
-      [-promenade, 18],
-      [promenade, -18],
-      [18, -promenade],
-      [-18, promenade],
-    ]) {
-      addStreetLamp(x, z, 0.01, 0.9);
+    addPiers();
+    addRail();
+  }
+
+  function addPiers() {
+    const wood = standard("#8a6a4a", { roughness: 0.95 });
+    const postMat = standard("#6f553d", { roughness: 1 });
+    const ropeMat = standard("#c9b48a");
+    for (const pier of plan.piers) {
+      const alongX = pier.dir === "east";
+      const cx = alongX ? pier.x + pier.length / 2 : pier.x;
+      const cz = alongX ? pier.z : pier.z + pier.length / 2;
+      const deckX = alongX ? pier.length : pier.width;
+      const deckZ = alongX ? pier.width : pier.length;
+      addBox(group, deckX, 0.1, deckZ, wood, cx, -0.5, cz, { cast: false });
+      addBox(group, deckX * 0.96, 0.02, deckZ * 0.96, standard("#9c7c57"), cx, -0.44, cz, {
+        cast: false,
+      });
+      const postCount = Math.max(2, Math.round(pier.length / 1.15));
+      for (let index = 0; index <= postCount; index += 1) {
+        const t = (index / postCount) * pier.length;
+        for (const side of [-1, 1]) {
+          const px = alongX ? pier.x + t : pier.x + (side * pier.width) / 2 - 0.03;
+          const pz = alongX ? pier.z + (side * pier.width) / 2 - 0.03 : pier.z + t;
+          addBox(group, 0.08, 1.5, 0.08, postMat, px, -1.05, pz, { cast: false });
+        }
+      }
+      const bollard = (x, z) => {
+        addCylinder(group, 0.07, 0.24, steelDarkMat, x, -0.33, z);
+        addCylinder(group, 0.09, 0.04, steelDarkMat, x, -0.2, z);
+      };
+      if (alongX) {
+        bollard(pier.x + pier.length - 0.2, pier.z - pier.width / 2 + 0.16);
+        bollard(pier.x + pier.length - 0.2, pier.z + pier.width / 2 - 0.16);
+      } else {
+        bollard(pier.x - pier.width / 2 + 0.16, pier.z + pier.length - 0.2);
+        bollard(pier.x + pier.width / 2 - 0.16, pier.z + pier.length - 0.2);
+      }
+      if (pier.length > 4) {
+        const craneMat = standard("#dfb24f", { roughness: 0.6, metalness: 0.1 });
+        const craneX = alongX ? pier.x + pier.length * 0.62 : pier.x;
+        const craneZ = alongX ? pier.z : pier.z + pier.length * 0.62;
+        addBox(group, 0.12, 1.8, 0.12, craneMat, craneX, 0.4, craneZ, { cast: false });
+        addBox(group, 0.08, 0.08, 1.7, craneMat, craneX, 1.28, craneZ + 0.65, { cast: false });
+        addBox(group, 0.28, 0.3, 0.38, standard("#7d8a8a"), craneX, 0.82, craneZ + 1.3, {
+          cast: false,
+        });
+        addBox(group, 0.04, 0.7, 0.04, blackMat, craneX, 1.05, craneZ + 1.3, { cast: false });
+        addBox(group, 0.1, 0.1, 0.1, beaconMat, craneX, 1.75, craneZ, {
+          cast: false,
+          receive: false,
+        });
+      }
+      addBox(group, 0.55, 0.22, 0.4, ropeMat, alongX ? cx : cx + 0.3, -0.35, alongX ? cz + 0.3 : cz, {
+        cast: false,
+      });
     }
   }
 
-  function addRoads() {
-    const roadSpan = CITY_EXTENT * 2;
-    for (const line of ROAD_LINES) {
-      addBox(group, 2, 0.06, roadSpan, asphaltMat, line, 0.03, 0, {
+  function addRail() {
+    const { z, x0, x1, station } = plan.rail;
+    const span = x1 - x0;
+    const midX = (x0 + x1) / 2;
+    addBox(group, span, 0.05, 1.05, standard("#6c6459", { roughness: 1 }), midX, 0.03, z, {
+      cast: false,
+    });
+    for (const side of [-1, 1]) {
+      addBox(group, span, 0.035, 0.05, steelDarkMat, midX, 0.08, z + side * 0.26, {
         cast: false,
-        receive: true,
-      });
-      addBox(group, roadSpan, 0.06, 2, asphaltMat, 0, 0.031, line, {
-        cast: false,
-        receive: true,
       });
     }
+    const tieCount = Math.floor(span / 0.52);
+    const tieMesh = new THREE.InstancedMesh(boxGeometry, standard("#4b4034"), tieCount);
+    const dummy = new THREE.Object3D();
+    for (let index = 0; index < tieCount; index += 1) {
+      dummy.position.set(x0 + 0.26 + index * 0.52, 0.052, z);
+      dummy.scale.set(0.075, 0.035, 0.86);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      tieMesh.setMatrixAt(index, dummy.matrix);
+    }
+    tieMesh.instanceMatrix.needsUpdate = true;
+    group.add(tieMesh);
 
-    const dashTransforms = [];
-    for (const line of ROAD_LINES) {
-      for (let position = -CITY_EXTENT + 0.9; position <= CITY_EXTENT - 0.9; position += 1.45) {
-        const nearIntersection = ROAD_LINES.some((cross) => Math.abs(position - cross) < 2.1);
-        if (nearIntersection) continue;
-        dashTransforms.push({
-          x: line,
-          z: position,
-          sx: 0.075,
-          sz: 0.56,
-        });
-        dashTransforms.push({
-          x: position,
-          z: line,
-          sx: 0.56,
-          sz: 0.075,
+    addBox(group, 3.9, 0.34, 0.95, stoneMat, station.x, 0.17, -20.55, { cast: false });
+    addBox(group, 3.9, 0.04, 0.95, trimMat, station.x, 0.35, -20.55, { cast: false });
+    addBox(group, 1.4, 0.55, 0.8, standard("#c9c2b0"), station.x, 0.62, -20.15, { cast: false });
+    addBox(group, 1.8, 0.07, 1.15, standard("#8d5d58"), station.x, 0.94, -20.15, { cast: false });
+    addSignPanel(group, "#e7c36a", 0.8, 0.22, station.x, 0.86, -20.55);
+
+    const train = new THREE.Group();
+    const bodyMat = standard("#d8d2c2", { roughness: 0.55 });
+    const stripeMat = standard("#b4574c", { roughness: 0.6 });
+    const windowMat = standard("#3b5562", { roughness: 0.3, metalness: 0.2 });
+    for (let car = 0; car < 3; car += 1) {
+      const offset = car * 2.4;
+      addBox(train, 2.1, 0.62, 0.78, bodyMat, offset, 0.38, 0, { cast: false });
+      addBox(train, 2.12, 0.08, 0.8, stripeMat, offset, 0.28, 0, { cast: false });
+      addBox(train, 1.6, 0.2, 0.82, windowMat, offset, 0.48, 0, { cast: false });
+      addBox(train, 0.06, 0.16, 0.5, headlightMat, offset + 1.07, 0.34, 0, {
+        cast: false,
+        receive: false,
+      });
+    }
+    train.position.set(x0 + 4, 0.03, z);
+    group.add(train);
+    trains.push({ group: train, x: x0 + 4, min: x0 + 3, max: x1 - 3, speed: 1.6 });
+  }
+
+  function addRoads() {
+    const dashSpecs = [];
+    const laneMaterial = standard("#8f8574", { roughness: 1 });
+    for (const street of plan.streets) {
+      const dx = street.x1 - street.x0;
+      const dz = street.z1 - street.z0;
+      const length = Math.hypot(dx, dz);
+      if (length < 0.9) continue;
+      const angle = Math.atan2(-dz, dx);
+      const cx = (street.x0 + street.x1) / 2;
+      const cz = (street.z0 + street.z1) / 2;
+      const ux = dx / length;
+      const uz = dz / length;
+
+      if (street.kind === "lane" && street.width <= 1.1) {
+        const lane = addBox(
+          group,
+          length,
+          0.02,
+          street.width * 0.92,
+          laneMaterial,
+          cx,
+          0.055,
+          cz,
+          { cast: false }
+        );
+        lane.rotation.y = angle;
+        continue;
+      }
+      if (street.width < 1.05) continue;
+
+      const step = street.kind === "boulevard" || street.kind === "quay" ? 1.15 : 1.0;
+      const count = Math.floor((length - 1.0) / step);
+      for (let index = 0; index <= count; index += 1) {
+        const along = -length / 2 + 0.5 + index * step;
+        dashSpecs.push({
+          x: cx + ux * along,
+          z: cz + uz * along,
+          angle,
+          length: street.kind === "lane" ? 0.3 : 0.44,
         });
       }
     }
-    const dashMesh = new THREE.InstancedMesh(boxGeometry, laneMat, dashTransforms.length);
-    const dummy = new THREE.Object3D();
-    dashTransforms.forEach((item, index) => {
-      dummy.position.set(item.x, 0.076, item.z);
-      dummy.scale.set(item.sx, 0.018, item.sz);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      dashMesh.setMatrixAt(index, dummy.matrix);
-    });
-    dashMesh.instanceMatrix.needsUpdate = true;
-    dashMesh.receiveShadow = true;
-    group.add(dashMesh);
+    if (dashSpecs.length) {
+      const dashMesh = new THREE.InstancedMesh(boxGeometry, laneMat, dashSpecs.length);
+      const dummy = new THREE.Object3D();
+      dashSpecs.forEach((spec, index) => {
+        dummy.position.set(spec.x, 0.078, spec.z);
+        dummy.rotation.set(0, spec.angle, 0);
+        dummy.scale.set(spec.length, 0.016, 0.055);
+        dummy.updateMatrix();
+        dashMesh.setMatrixAt(index, dummy.matrix);
+      });
+      dashMesh.instanceMatrix.needsUpdate = true;
+      group.add(dashMesh);
+    }
 
-    const crossTransforms = [];
-    for (const roadX of ROAD_LINES) {
-      for (const roadZ of ROAD_LINES) {
-        for (const offset of [-2.22, 2.22]) {
-          if (Math.abs(roadZ + offset) < CITY_EXTENT - 0.25) {
-            for (let stripe = -1; stripe <= 1; stripe += 1) {
-              crossTransforms.push({
-                x: roadX,
-                z: roadZ + offset + stripe * 0.22,
-                sx: 1.62,
-                sz: 0.075,
-              });
-            }
-          }
-          if (Math.abs(roadX + offset) < CITY_EXTENT - 0.25) {
-            for (let stripe = -1; stripe <= 1; stripe += 1) {
-              crossTransforms.push({
-                x: roadX + offset + stripe * 0.22,
-                z: roadZ,
-                sx: 0.075,
-                sz: 1.62,
+    const crossSpecs = [];
+    const crossings = plan.arterials.filter((street) => street.width >= 1.3);
+    for (let first = 0; first < crossings.length; first += 1) {
+      for (let second = first + 1; second < crossings.length; second += 1) {
+        const a = crossings[first];
+        const b = crossings[second];
+        const ax = a.x1 - a.x0;
+        const az = a.z1 - a.z0;
+        const bx = b.x1 - b.x0;
+        const bz = b.z1 - b.z0;
+        const denominator = ax * bz - az * bx;
+        if (Math.abs(denominator) < 0.001) continue;
+        const t = ((b.x0 - a.x0) * bz - (b.z0 - a.z0) * bx) / denominator;
+        const u = ((b.x0 - a.x0) * az - (b.z0 - a.z0) * ax) / denominator;
+        if (t < 0.06 || t > 0.94 || u < 0.06 || u > 0.94) continue;
+        const px = a.x0 + ax * t;
+        const pz = a.z0 + az * t;
+        for (const street of [a, b]) {
+          const dx = street.x1 - street.x0;
+          const dz = street.z1 - street.z0;
+          const length = Math.hypot(dx, dz);
+          const ux = dx / length;
+          const uz = dz / length;
+          const nX = -uz;
+          const nZ = ux;
+          const angle = Math.atan2(-dz, dx);
+          for (const side of [-1, 1]) {
+            const distance = street.width / 2 + 0.55;
+            for (const lane of [-0.34, 0, 0.34]) {
+              crossSpecs.push({
+                x: px + ux * side * distance + nX * lane,
+                z: pz + uz * side * distance + nZ * lane,
+                angle,
               });
             }
           }
         }
       }
     }
-    const crossMesh = new THREE.InstancedMesh(boxGeometry, crosswalkMat, crossTransforms.length);
-    crossTransforms.forEach((item, index) => {
-      dummy.position.set(item.x, 0.078, item.z);
-      dummy.scale.set(item.sx, 0.016, item.sz);
-      dummy.rotation.set(0, 0, 0);
-      dummy.updateMatrix();
-      crossMesh.setMatrixAt(index, dummy.matrix);
-    });
-    crossMesh.instanceMatrix.needsUpdate = true;
-    crossMesh.receiveShadow = true;
-    group.add(crossMesh);
+    if (crossSpecs.length) {
+      const crossMesh = new THREE.InstancedMesh(boxGeometry, crosswalkMat, crossSpecs.length);
+      const dummy = new THREE.Object3D();
+      crossSpecs.forEach((spec, index) => {
+        dummy.position.set(spec.x, 0.084, spec.z);
+        dummy.rotation.set(0, spec.angle, 0);
+        dummy.scale.set(0.07, 0.016, 0.52);
+        dummy.updateMatrix();
+        crossMesh.setMatrixAt(index, dummy.matrix);
+      });
+      crossMesh.instanceMatrix.needsUpdate = true;
+      group.add(crossMesh);
+    }
 
-    // Street lamps at the inner intersections.
-    for (const x of [-12, -4, 4, 12]) {
-      for (const z of [-12, -4, 4, 12]) {
-        addStreetLamp(x + 1.42, z + 1.42, 0.31);
+    for (const street of plan.arterials) {
+      const dx = street.x1 - street.x0;
+      const dz = street.z1 - street.z0;
+      const length = Math.hypot(dx, dz);
+      if (length < 1) continue;
+      const ux = dx / length;
+      const uz = dz / length;
+      const angle = Math.atan2(-dz, dx);
+      const cx = (street.x0 + street.x1) / 2;
+      const cz = (street.z0 + street.z1) / 2;
+      if (street.width >= 1.3) {
+        for (const side of [-1, 1]) {
+          const edge = addBox(
+            group,
+            length,
+            0.02,
+            0.1,
+            trimMat,
+            cx - uz * side * (street.width / 2 - 0.05),
+            0.082,
+            cz + ux * side * (street.width / 2 - 0.05),
+            { cast: false }
+          );
+          edge.rotation.y = angle;
+        }
+      }
+      if (street.kind === "boulevard" && street.width >= 2.2) {
+        const median = addBox(
+          group,
+          length,
+          0.03,
+          0.24,
+          grassMat,
+          cx,
+          0.075,
+          cz,
+          { cast: false }
+        );
+        median.rotation.y = angle;
+        const treeCount = Math.floor(length / 3.2);
+        for (let index = 1; index < treeCount; index += 1) {
+          const along = -length / 2 + index * 3.2;
+          addTree(
+            group,
+            cx + ux * along,
+            cz + uz * along,
+            rand(rng, 0.36, 0.48),
+            0.08,
+            index % 3 === 0 ? "cherry" : "broadleaf"
+          );
+        }
+      }
+      const count = Math.floor(length / 4.2);
+      for (let index = 0; index <= count; index += 1) {
+        const along = -length / 2 + 1.0 + index * 4.2;
+        const side = index % 2 === 0 ? 1 : -1;
+        const offset = street.width / 2 + 0.32;
+        addStreetLamp(
+          cx + ux * along - uz * side * offset,
+          cz + uz * along + ux * side * offset,
+          0.03,
+          0.8
+        );
       }
     }
-  }
 
-  function blockLabel(i, j) {
-    return `${String.fromCharCode(65 + i)}-${String(j + 1).padStart(2, "0")}`;
+    for (let x = -9.6; x <= 22; x += 2.6) {
+      addTree(group, x, 4.45, rand(rng, 0.45, 0.58), 0.03, "broadleaf");
+    }
+    for (let z = 7.3; z <= 21.8; z += 2.6) {
+      addTree(group, 4.85, z, rand(rng, 0.42, 0.56), 0.03, "palm");
+    }
   }
 
   function makeName(kind, label) {
@@ -1439,8 +1542,11 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     floorHeight = FLOOR_HEIGHT,
     litChance = 0.42,
     skipGround = true,
+    angle = 0,
   }) {
     const firstRow = skipGround ? 1 : 0;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
 
     const addSide = (length, axis, side, rotation) => {
       const columns = Math.max(1, Math.floor(length / 0.42));
@@ -1450,25 +1556,16 @@ export function createCity({ seed = randomCitySeed() } = {}) {
           if (rng() < 0.18) continue;
           const offset = -length / 2 + spacing * (col + 1);
           const y = baseY + bodyStart + row * floorHeight + floorHeight * 0.53;
-          if (axis === "z") {
-            windowSpecs.push({
-              x: worldX + offset,
-              y,
-              z: worldZ + side * (depth / 2 + 0.022),
-              rotation,
-              lit: rng() < litChance,
-              scale: rand(rng, 0.86, 1.08),
-            });
-          } else {
-            windowSpecs.push({
-              x: worldX + side * (width / 2 + 0.022),
-              y,
-              z: worldZ + offset,
-              rotation,
-              lit: rng() < litChance,
-              scale: rand(rng, 0.86, 1.08),
-            });
-          }
+          const localX = axis === "z" ? offset : side * (width / 2 + 0.022);
+          const localZ = axis === "z" ? side * (depth / 2 + 0.022) : offset;
+          windowSpecs.push({
+            x: worldX + localX * cos + localZ * sin,
+            y,
+            z: worldZ - localX * sin + localZ * cos,
+            rotation: rotation + angle,
+            lit: rng() < litChance,
+            scale: rand(rng, 0.86, 1.08),
+          });
         }
       }
     };
@@ -1496,9 +1593,12 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     setback = false,
     typeDef = null,
     style = null,
+    rotation = 0,
+    blockAngle = 0,
   }) {
     const root = new THREE.Group();
     root.position.set(localX, BLOCK_TOP, localZ);
+    root.rotation.y = rotation;
     const wallColor = color ?? choose(rng, BUILDING_COLORS);
     const wallMaterial = standard(wallColor);
     const roofMaterial = standard(choose(rng, ROOF_COLORS));
@@ -1719,20 +1819,26 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       });
     }
 
+    const cosA = Math.cos(blockAngle);
+    const sinA = Math.sin(blockAngle);
+    const worldX = blockX + localX * cosA + localZ * sinA;
+    const worldZ = blockZ - localX * sinA + localZ * cosA;
+
     addWindows({
-      worldX: blockX + localX,
-      worldZ: blockZ + localZ,
+      worldX,
+      worldZ,
       width,
       depth,
       floors: lowerFloors,
       bodyStart,
       floorHeight,
       litChance: kind === "downtown" ? 0.42 : 0.32,
+      angle: rotation + blockAngle,
     });
     if (stepped) {
       addWindows({
-        worldX: blockX + localX,
-        worldZ: blockZ + localZ,
+        worldX,
+        worldZ,
         width: upperWidth,
         depth: upperDepth,
         floors: upperFloors,
@@ -1740,6 +1846,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         baseY: BLOCK_TOP + bodyStart + lowerHeight,
         floorHeight,
         litChance: 0.4,
+        angle: rotation + blockAngle,
       });
     }
 
@@ -1812,9 +1919,12 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     color,
     typeDef = null,
     style = null,
+    rotation = 0,
+    blockAngle = 0,
   }) {
     const root = new THREE.Group();
     root.position.set(localX, BLOCK_TOP, localZ);
+    root.rotation.y = rotation;
     const wallColor = color ?? choose(rng, BUILDING_COLORS);
     const wallMaterial = standard(wallColor);
     const roofMaterial = standard(choose(rng, ROOF_COLORS));
@@ -1857,15 +1967,22 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       beacons.push({ mesh: beacon, phase: rng() * TAU });
     }
 
+    const roundCos = Math.cos(blockAngle);
+    const roundSin = Math.sin(blockAngle);
+    const roundCenterX = blockX + localX * roundCos + localZ * roundSin;
+    const roundCenterZ = blockZ - localX * roundSin + localZ * roundCos;
+    const totalAngle = rotation + blockAngle;
     for (let row = 1; row < floors; row += 1) {
       for (let col = 0; col < columns; col += 1) {
         if (rng() < 0.14) continue;
         const angle = ((col + 0.5) / columns) * TAU;
+        const offsetX = Math.cos(angle) * (radius + 0.035);
+        const offsetZ = Math.sin(angle) * (radius + 0.035);
         windowSpecs.push({
-          x: blockX + localX + Math.cos(angle) * (radius + 0.035),
+          x: roundCenterX + offsetX * Math.cos(totalAngle) + offsetZ * Math.sin(totalAngle),
           y: BLOCK_TOP + bodyStart + row * floorHeight + floorHeight * 0.53,
-          z: blockZ + localZ + Math.sin(angle) * (radius + 0.035),
-          rotation: Math.PI / 2 - angle,
+          z: roundCenterZ - offsetX * Math.sin(totalAngle) + offsetZ * Math.cos(totalAngle),
+          rotation: Math.PI / 2 - angle + totalAngle,
           lit: rng() < (kind === "downtown" ? 0.42 : 0.3),
           scale: rand(rng, 0.9, 1.06),
         });
@@ -1927,9 +2044,12 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     color,
     typeDef = null,
     style = null,
+    rotation = 0,
+    blockAngle = 0,
   }) {
     const root = new THREE.Group();
     root.position.set(localX, BLOCK_TOP, localZ);
+    root.rotation.y = rotation;
     const wallColor = color ?? choose(rng, BUILDING_COLORS);
     const wallMaterial = standard(wallColor);
     const roofMaterial = standard(rng() < 0.5 ? roofPineMat : choose(rng, ROOF_COLORS));
@@ -2033,9 +2153,11 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       receive: true,
     });
 
+    const houseCos = Math.cos(blockAngle);
+    const houseSin = Math.sin(blockAngle);
     addWindows({
-      worldX: blockX + localX,
-      worldZ: blockZ + localZ,
+      worldX: blockX + localX * houseCos + localZ * houseSin,
+      worldZ: blockZ - localX * houseSin + localZ * houseCos,
       width,
       depth,
       floors,
@@ -2043,6 +2165,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       floorHeight: 0.34,
       litChance: 0.42,
       skipGround: false,
+      angle: rotation + blockAngle,
     });
 
     if (rng() < 0.5) {
@@ -2083,254 +2206,6 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     return record;
   }
 
-  function addPlotDetails(blockGroup) {
-    const possible = [
-      [-2.18, -2.02],
-      [2.15, -2.15],
-      [-2.12, 2.18],
-      [2.17, 2.12],
-    ];
-    for (const [x, z] of possible) {
-      if (rng() < 0.6) addTree(blockGroup, x, z, rand(rng, 0.62, 0.85), BLOCK_TOP);
-    }
-    for (let i = 0; i < 3; i += 1) {
-      addBush(
-        blockGroup,
-        rand(rng, -2.35, 2.35),
-        rng() < 0.5 ? rand(rng, -2.45, -2.1) : rand(rng, 2.1, 2.45),
-        rand(rng, 0.6, 0.9),
-        BLOCK_TOP
-      );
-    }
-  }
-
-  function addResidentialBlock(blockGroup, blockX, blockZ, label) {
-    const lots = [
-      [-1.28, -1.28],
-      [1.28, -1.28],
-      [-1.28, 1.28],
-      [1.28, 1.28],
-    ];
-    lots.forEach(([lotX, lotZ], index) => {
-      if (rng() < 0.06) return;
-      const x = lotX + rand(rng, -0.07, 0.07);
-      const z = lotZ + rand(rng, -0.07, 0.07);
-      const house = rng() < 0.56;
-      if (house) {
-        addHouse({
-          blockGroup,
-          blockX,
-          blockZ,
-          localX: x,
-          localZ: z,
-          width: rand(rng, 0.9, 1.18),
-          depth: rand(rng, 0.85, 1.12),
-          floors: rng() < 0.7 ? 1 : 2,
-          label,
-          color: choose(rng, BUILDING_COLORS),
-        });
-      } else {
-        addTower({
-          blockGroup,
-          blockX,
-          blockZ,
-          localX: x,
-          localZ: z,
-          width: rand(rng, 1.02, 1.34),
-          depth: rand(rng, 0.98, 1.3),
-          floors: 3 + Math.floor(rng() * 3),
-          kind: "residential",
-          label,
-          color: choose(rng, BUILDING_COLORS),
-          apartment: true,
-        });
-      }
-      if (index === 0 || index === 3) {
-        addFlowers(blockGroup, x + (x > 0 ? 0.82 : -0.82), z + 0.62, BLOCK_TOP);
-      }
-    });
-    addPlotDetails(blockGroup);
-    addTree(blockGroup, -2.25, 0.15, 0.56, BLOCK_TOP);
-    addBush(blockGroup, 2.32, 0.02, 0.78, BLOCK_TOP);
-  }
-
-  function addCommercialBlock(blockGroup, blockX, blockZ, label) {
-    const layouts = [
-      [-1.28, -1.25, 1.55, 1.45],
-      [1.32, -1.22, 1.46, 1.5],
-      [-1.2, 1.25, 1.52, 1.38],
-      [1.28, 1.29, 1.3, 1.28],
-    ];
-    const buildCount = rng() < 0.25 ? 2 : 3;
-    const indexes = buildCount === 2 ? [0, 2] : [0, 1, 2];
-    indexes.forEach((index) => {
-      const [x, z, maxW, maxD] = layouts[index];
-      const localX = x + rand(rng, -0.05, 0.05);
-      const localZ = z + rand(rng, -0.05, 0.05);
-      const floors = 2 + Math.floor(rng() * 5);
-      const color = choose(rng, BUILDING_COLORS);
-      if (index === 0 && rng() < 0.26) {
-        addRoundTower({
-          blockGroup,
-          blockX,
-          blockZ,
-          localX,
-          localZ,
-          radius: Math.min(maxW, maxD) * 0.42,
-          floors,
-          kind: "commercial",
-          label,
-          color,
-        });
-      } else {
-        addTower({
-          blockGroup,
-          blockX,
-          blockZ,
-          localX,
-          localZ,
-          width: rand(rng, maxW * 0.78, maxW),
-          depth: rand(rng, maxD * 0.78, maxD),
-          floors,
-          kind: "commercial",
-          label,
-          color,
-        });
-      }
-    });
-    const plazaIndex = buildCount === 2 ? 3 : 2;
-    addTree(
-      blockGroup,
-      layouts[plazaIndex][0] * 0.7,
-      layouts[plazaIndex][1] * 0.7,
-      0.62,
-      BLOCK_TOP
-    );
-    addBench(blockGroup, 1.9, 1.95, Math.PI * 0.2, BLOCK_TOP);
-    addBush(blockGroup, -2.17, 2.1, 0.72, BLOCK_TOP);
-    if (rng() < 0.7) addFlowers(blockGroup, 1.7, 1.95, BLOCK_TOP);
-  }
-
-  function addDowntownBlock(blockGroup, blockX, blockZ, label, landmark = false) {
-    const floors = landmark ? 15 + Math.floor(rng() * 5) : 8 + Math.floor(rng() * 8);
-    const width = landmark ? 2.3 : rand(rng, 2.1, 2.6);
-    const depth = landmark ? 2.25 : rand(rng, 2.05, 2.55);
-    const color = landmark
-      ? choose(rng, ["#d7c29d", "#a7c3bd", "#d4a58e"])
-      : choose(rng, ["#c6d1c8", "#d9c6a9", "#aebdc4", "#d8b58b", "#b9adc2"]);
-    const localX = rand(rng, -0.15, 0.15);
-    const localZ = rand(rng, -0.18, 0.18);
-    if (!landmark && rng() < 0.32) {
-      addRoundTower({
-        blockGroup,
-        blockX,
-        blockZ,
-        localX,
-        localZ,
-        radius: Math.min(width, depth) * 0.46,
-        floors,
-        kind: "downtown",
-        label,
-        color,
-      });
-    } else {
-      addTower({
-        blockGroup,
-        blockX,
-        blockZ,
-        localX,
-        localZ,
-        width,
-        depth,
-        floors,
-        kind: "downtown",
-        label,
-        color,
-        landmark,
-        setback: floors >= 10 && rng() < 0.62,
-      });
-    }
-    if (rng() < 0.72) {
-      addTower({
-        blockGroup,
-        blockX,
-        blockZ,
-        localX: rand(rng, 1.65, 1.95),
-        localZ: rand(rng, 1.55, 1.8),
-        width: rand(rng, 0.78, 1.02),
-        depth: rand(rng, 0.78, 1.0),
-        floors: 2 + Math.floor(rng() * 3),
-        kind: "commercial",
-        label,
-        color: choose(rng, BUILDING_COLORS),
-      });
-    }
-    addTree(blockGroup, -2.15, 2.08, 0.72, BLOCK_TOP);
-    addTree(blockGroup, 2.2, -2.02, 0.56, BLOCK_TOP);
-    addBench(blockGroup, -1.85, 1.58, Math.PI * 0.1, BLOCK_TOP);
-    addFlowers(blockGroup, -1.7, -2.0, BLOCK_TOP);
-  }
-
-  function addParkBlock(blockGroup, blockX, blockZ, label) {
-    const feature = new THREE.Group();
-    feature.rotation.y = Math.floor(rng() * 4) * (Math.PI / 2);
-    blockGroup.add(feature);
-
-    addBox(feature, 5.25, 0.03, 0.62, pathMat, 0, BLOCK_TOP + 0.012, 0, { cast: false });
-    addBox(feature, 0.62, 0.03, 5.25, pathMat, 0, BLOCK_TOP + 0.014, 0, { cast: false });
-    addBox(feature, 1.5, 0.025, 0.5, pathMat, 1.55, BLOCK_TOP + 0.013, 1.2, { cast: false });
-
-    addParkFountain(feature, 0, 0);
-    addPond(feature, -1.42, 1.42, BLOCK_TOP);
-    addGazebo(feature, 1.58, 1.52, BLOCK_TOP);
-    addPlayground(feature, -1.38, -1.58, BLOCK_TOP);
-
-    const treePositions = [
-      [-2.2, -2.14, 0.74],
-      [2.14, -2.02, 0.66],
-      [2.22, 0.36, 0.56],
-      [-2.22, 0.34, 0.52],
-      [0.42, 2.3, 0.5],
-      [2.28, 2.28, 0.7],
-      [-2.28, -0.7, 0.48],
-    ];
-    for (const [x, z, scale] of treePositions) {
-      addTree(feature, x, z, scale, BLOCK_TOP);
-    }
-    addBench(feature, 0.98, 0.78, -Math.PI / 2, BLOCK_TOP);
-    addBench(feature, -0.98, -0.78, Math.PI / 2, BLOCK_TOP);
-    addBench(feature, -1.42, 2.2, Math.PI, BLOCK_TOP);
-    addBush(feature, 2.3, 2.3, 0.82, BLOCK_TOP);
-    addBush(feature, -2.3, -2.3, 0.7, BLOCK_TOP);
-    addBush(feature, 1.02, 1.98, 0.6, BLOCK_TOP);
-    for (let i = 0; i < 5; i += 1) {
-      addFlowers(feature, rand(rng, -2.25, 2.25), rand(rng, -2.25, 2.25), BLOCK_TOP);
-    }
-    addStreetLamp(blockX + 2.05, blockZ + 2.25, BLOCK_TOP, 0.76);
-    addStreetLamp(blockX - 2.05, blockZ - 2.25, BLOCK_TOP, 0.76);
-
-    const record = {
-      id: `${label}-park`,
-      name: makeName("park", label),
-      kind: "park",
-      label,
-      floors: 0,
-      detailLabel: "绿化覆盖",
-      detailValue: `${Math.round(rand(rng, 58, 84))}%`,
-      height: Math.round((BLOCK_TOP + 1.1) * 3.2 * 10) / 10,
-      population: 0,
-      jobs: Math.round(rand(rng, 12, 24)),
-      occupancy: Math.round(rand(rng, 0.7, 0.96) * 100),
-      year: 2034 + Math.floor(rng() * 14),
-      color: "#7c9d59",
-      note: choose(rng, SPECIAL_NOTES.park),
-      address: `BLOCK ${label} · 像素湾${blockX > 0 ? "东" : "西"}区`,
-      root: feature,
-    };
-    addBuildingInfo(feature, record);
-    return record;
-  }
-
   const defUseCount = new Map();
 
   function chooseWeightedDef(pool) {
@@ -2349,18 +2224,29 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     const forcedPool = {
       clocktower: ["b-clocktower"],
       lighthouse: ["b-lighthouse"],
-      landmark: ["b-observation", "b-skygarden"],
-      skyscraper: SKYSCRAPERS.map((asset) => asset.id),
       school: ["b-school"],
       civic: ["b-cityhall", "b-museum", "b-library"],
+      energy: ["b-energy"],
       industrial: ["b-energy", "b-warehouse", "b-workshop"],
-      warehouse: ["b-warehouse", "b-workshop", "b-market"],
-      market: ["b-market", "b-department", "b-bookshop"],
+      warehouse: ["b-warehouse"],
+      market: ["b-market"],
+      department: ["b-department"],
+      office: ["b-glass", "b-stepped", "b-media", "b-office"],
+      "harbor-office": ["b-office", "b-clinic"],
     };
+    if (role === "landmark" || role === "skyscraper") {
+      const candidates =
+        role === "landmark"
+          ? SKYSCRAPERS.filter((asset) => asset.id === "s-apex")
+          : SKYSCRAPERS.filter((asset) => asset.id !== "s-apex");
+      if (candidates.length) {
+        const def = choose(rng, candidates);
+        defUseCount.set(def.id, (defUseCount.get(def.id) ?? 0) + 1);
+        return def;
+      }
+    }
     if (role && forcedPool[role]) {
-      const candidatePool =
-        role === "skyscraper" ? SKYSCRAPERS : forcedPool[role].map((id) => BUILDINGS_BY_ID.get(id));
-      const candidates = candidatePool.filter(Boolean);
+      const candidates = forcedPool[role].map((id) => BUILDINGS_BY_ID.get(id)).filter(Boolean);
       if (candidates.length) {
         const def = choose(rng, candidates);
         defUseCount.set(def.id, (defUseCount.get(def.id) ?? 0) + 1);
@@ -2608,7 +2494,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     }
 
     if (style === "cinema") {
-      addBox(root, width * 0.67, 0.12, 0.42, accent, 0, 0.83, front + 0.28, {
+      addBox(root, width * 0.67, 0.12, 0.42, standard(accent), 0, 0.83, front + 0.28, {
         cast: false,
       });
       addSignPanel(root, "#f2c45a", width * 0.47, 0.2, 0, 0.93, front + 0.51);
@@ -2639,7 +2525,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     }
 
     if (style === "bookshop") {
-      addBox(root, width * 0.45, 0.16, 0.06, accent, 0, 0.94, front + 0.05);
+      addBox(root, width * 0.45, 0.16, 0.06, standard(accent), 0, 0.94, front + 0.05);
       addAwning(root, width * 0.56, 0, 0.7, front + 0.16, "#d2b06d");
       addBox(root, width * 0.12, 0.3, 0.18, standard("#8b6b4c"), -width * 0.3, 0.18, front + 0.24);
     }
@@ -2724,44 +2610,37 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     label,
     district,
     role,
+    density = 1,
+    rotation = 0,
+    blockAngle = 0,
   }) {
     if (!def) return null;
+    if (def.family === "skyscraper") {
+      const record = addSkyscraperBlock({
+        blockGroup,
+        localX,
+        localZ,
+        lot,
+        def,
+        label,
+        role,
+        rotation,
+      });
+      addBuildingRecordDistrict(record, district);
+      return record;
+    }
     const model = def.model;
     const width = Math.max(0.55, Math.min(lot.w, rand(rng, model.width[0], model.width[1])));
     const depth = Math.max(0.55, Math.min(lot.d, rand(rng, model.depth[0], model.depth[1])));
-    let floors = Math.max(1, Math.round(rand(rng, model.floors[0], model.floors[1])));
+    const floorScale = Math.max(0.4, density);
+    let floors = Math.max(1, Math.round(rand(rng, model.floors[0], model.floors[1]) * floorScale));
     if (role === "landmark" || role === "clocktower" || role === "lighthouse") {
-      floors = Math.max(floors, model.floors[0]);
+      floors = Math.max(floors, Math.round(model.floors[0] * floorScale));
     }
     const color = choose(rng, model.walls);
     const style = model.style;
-    const kind = def.family === "skyscraper" ? "downtown" : def.family;
+    const kind = def.family;
     let record = null;
-
-    if (def.family === "skyscraper") {
-      const baseSize = Math.min(lot.w + 0.28, Math.max(width, depth) * (model.plinthScale ?? 1.3));
-      addBox(blockGroup, baseSize, 0.06, baseSize, stoneMat, localX, BLOCK_TOP + 0.015, localZ, {
-        cast: false,
-      });
-      addBox(blockGroup, baseSize * 0.86, 0.055, baseSize * 0.86, trimMat, localX, BLOCK_TOP + 0.065, localZ, {
-        cast: false,
-      });
-      for (let step = 0; step < 3; step += 1) {
-        addBox(
-          blockGroup,
-          width * 0.58 - step * 0.14,
-          0.035,
-          0.18,
-          stoneMat,
-          localX,
-          BLOCK_TOP + 0.09 + step * 0.03,
-          localZ + depth * 0.55 + 0.12 + step * 0.09,
-          { cast: false }
-        );
-      }
-      addPlanter(blockGroup, localX - baseSize * 0.43, localZ + baseSize * 0.32, 0, BLOCK_TOP + 0.09);
-      addPlanter(blockGroup, localX + baseSize * 0.43, localZ - baseSize * 0.32, 0, BLOCK_TOP + 0.09);
-    }
 
     if (["gable", "townhouse", "courtyard"].includes(style)) {
       record = addHouse({
@@ -2777,6 +2656,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         color,
         typeDef: def,
         style,
+        rotation,
+        blockAngle,
       });
       decorateCityBuilding(record, def);
     } else if (style === "lighthouse") {
@@ -2793,6 +2674,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         color,
         typeDef: def,
         style,
+        rotation,
+        blockAngle,
       });
       const root = record.root;
       const radius = Math.min(width, depth) * 0.48;
@@ -2827,58 +2710,10 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         color,
         typeDef: def,
         style,
+        rotation,
+        blockAngle,
       });
       decorateCityBuilding(record, def);
-    } else if (style === "twin") {
-      const towerWidth = width * 0.48;
-      const left = addTower({
-        blockGroup,
-        blockX,
-        blockZ,
-        localX: localX - width * 0.28,
-        localZ,
-        width: towerWidth,
-        depth,
-        floors,
-        kind: "downtown",
-        label,
-        color,
-        typeDef: def,
-        style,
-      });
-      const right = addTower({
-        blockGroup,
-        blockX,
-        blockZ,
-        localX: localX + width * 0.28,
-        localZ,
-        width: towerWidth,
-        depth,
-        floors,
-        kind: "downtown",
-        label,
-        color,
-        typeDef: def,
-        style,
-      });
-      addBox(
-        blockGroup,
-        width * 0.34,
-        0.13,
-        depth * 0.48,
-        glassMat,
-        localX,
-        BLOCK_TOP + floors * FLOOR_HEIGHT * 0.56,
-        localZ
-      );
-      decorateCityBuilding(left, def);
-      decorateCityBuilding(right, def);
-      applySkyscraperHeight(left, def);
-      applySkyscraperHeight(right, def);
-      record = left;
-      addBuildingRecordDistrict(left, district);
-      addBuildingRecordDistrict(right, district);
-      return left;
     } else {
       const setback = ["stepped", "skygarden"].includes(style) && floors >= 6;
       record = addTower({
@@ -2898,23 +2733,16 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         setback,
         typeDef: def,
         style,
+        rotation,
+        blockAngle,
       });
       decorateCityBuilding(record, def);
     }
 
     if (record) {
-      decorateCitySkyscraper(record, def);
-      applySkyscraperHeight(record, def);
       addBuildingRecordDistrict(record, district);
     }
     return record;
-  }
-
-  function applySkyscraperHeight(record, def) {
-    if (!record || def?.family !== "skyscraper") return;
-    const crownHeight = record.style === "observation" ? 24 : record.style === "skygarden" ? 18 : 14;
-    record.height = Math.round((record.floors * 4.2 + crownHeight) * 10) / 10;
-    record.isSupertall = true;
   }
 
   function addBuildingRecordDistrict(record, district) {
@@ -2925,40 +2753,1201 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     if (district.model?.accent) record.districtAccent = district.model.accent;
   }
 
-  function decorateCitySkyscraper(record, def) {
-    if (!record || def?.family !== "skyscraper") return;
-    if (["twin", "observation", "skygarden"].includes(record.style)) return;
-    const root = record.root;
-    const width = record.footprint.width;
-    const depth = record.footprint.depth;
-    const top = record.bodyTop;
-    const accentColor = def.model.accent;
-    const accentMaterial = standard(accentColor, {
-      emissive: accentColor,
-      emissiveIntensity: 0.1,
-      roughness: 0.55,
-    });
-    neonMaterials.push(accentMaterial);
+  // ---- Skyscrapers -------------------------------------------------------
+  // A tower is assembled from four layers: a granite plaza, a colonnaded
+  // lobby, a curtain-wall shaft and a crown. Each catalog style only swaps
+  // the shaft and crown recipe, so the family reads as one typology instead
+  // of a stretched house.
 
-    addBox(root, width * 0.78, 0.26, depth * 0.78, trimMat, 0, top + 0.18, 0);
-    addBox(root, width * 0.62, 0.46, depth * 0.62, glassMat, 0, top + 0.54, 0, {
-      cast: false,
-    });
-    addBox(root, width * 0.42, 0.3, depth * 0.42, wallMaterialFor(record.color), 0, top + 0.92, 0);
-    addBox(root, width * 0.3, 0.08, depth * 0.3, accentMaterial, 0, top + 1.1, 0, {
-      cast: false,
-      receive: false,
-    });
-    addBox(root, 0.028, 1.55, 0.028, blackMat, 0, top + 1.85, 0);
-    const beacon = addBox(root, 0.075, 0.075, 0.075, beaconMat, 0, top + 2.66, 0, {
-      cast: false,
-      receive: false,
-    });
-    beacons.push({ mesh: beacon, phase: rng() * TAU });
+  function addOctagon(parent, width, height, depth, material, x, y, z, options = {}) {
+    const mesh = new THREE.Mesh(cylinderGeometry, material);
+    mesh.scale.set(width, height, depth);
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = Math.PI / 8;
+    mesh.castShadow = options.cast ?? true;
+    mesh.receiveShadow = options.receive ?? true;
+    parent.add(mesh);
+    return mesh;
   }
 
-  function wallMaterialFor(color) {
-    return standard(color);
+  function addSkyscraperPlaza(root, span, mat) {
+    const { mullion, accent } = mat;
+    addBox(root, span, 0.07, span, plazaMat, 0, 0.035, 0, { cast: false, receive: true });
+    addBox(root, span * 0.93, 0.045, span * 0.93, trimMat, 0, 0.09, 0, { cast: false });
+    addBox(root, span * 0.56, 0.012, 0.08, accent, 0, 0.118, span * 0.32, {
+      cast: false,
+      receive: false,
+    });
+    addBox(root, 0.08, 0.012, span * 0.3, accent, span * 0.32, 0.118, 0, {
+      cast: false,
+      receive: false,
+    });
+    for (const side of [-1, 1]) {
+      addPlanter(root, side * span * 0.4, span * 0.4, 0, 0.115);
+      addPlanter(root, side * span * 0.4, -span * 0.4, 0, 0.115);
+      addBox(root, 0.024, 0.92, 0.024, mullion, side * span * 0.27, 0.57, span * 0.41, {
+        cast: false,
+      });
+      addBox(root, 0.16, 0.1, 0.014, accent, side * span * 0.27 + 0.09, 0.95, span * 0.41, {
+        cast: false,
+        receive: false,
+      });
+    }
+  }
+
+  function addSkyscraperLobby(root, options) {
+    const { x = 0, z = 0, width, depth, height, mat } = options;
+    const { glass, mullion, accent, dark } = mat;
+    const baseY = 0.12;
+    addBox(root, width * 1.07, 0.06, depth * 1.07, trimMat, x, baseY + 0.03, z, { cast: false });
+    addBox(root, width, height, depth, glass, x, baseY + height / 2, z, { cast: true });
+
+    const columns = Math.max(3, Math.round(width / 0.42));
+    for (let index = 0; index <= columns; index += 1) {
+      const columnX = x - width / 2 + (width * index) / columns;
+      for (const side of [-1, 1]) {
+        addBox(root, 0.07, height, 0.07, mullion, columnX, baseY + height / 2, z + side * (depth / 2 + 0.015), {
+          cast: true,
+        });
+      }
+    }
+    const sideColumns = Math.max(2, Math.round(depth / 0.55));
+    for (let index = 1; index < sideColumns; index += 1) {
+      const columnZ = z - depth / 2 + (depth * index) / sideColumns;
+      for (const side of [-1, 1]) {
+        addBox(root, 0.07, height, 0.07, mullion, x + side * (width / 2 + 0.015), baseY + height / 2, columnZ, {
+          cast: true,
+        });
+      }
+    }
+
+    addBox(root, width * 0.46, 0.045, 0.5, mullion, x, baseY + height * 0.86, z + depth / 2 + 0.25, {
+      cast: true,
+    });
+    addBox(root, width * 0.46, 0.014, 0.5, accent, x, baseY + height * 0.86 - 0.03, z + depth / 2 + 0.25, {
+      cast: false,
+      receive: false,
+    });
+    addBox(root, 0.5, height * 0.62, 0.04, dark, x, baseY + (height * 0.62) / 2, z + depth / 2 + 0.03);
+    addBox(root, 0.34, height * 0.62, 0.05, glass, x, baseY + (height * 0.62) / 2, z + depth / 2 + 0.036, {
+      cast: false,
+    });
+    for (let step = 0; step < 3; step += 1) {
+      addBox(
+        root,
+        width * (0.62 - step * 0.07),
+        0.032,
+        0.34 - step * 0.04,
+        stoneMat,
+        x,
+        baseY + 0.06 - step * 0.02,
+        z + depth / 2 + 0.52 + step * 0.1,
+        { cast: false }
+      );
+    }
+    addBox(root, width * 1.08, 0.06, depth * 1.08, trimMat, x, baseY + height + 0.03, z, { cast: false });
+    return baseY + height + 0.06;
+  }
+
+  function addCurtainWall(parent, options) {
+    const {
+      width,
+      depth,
+      height,
+      y0,
+      floors,
+      mat,
+      bandEvery = 2,
+      finStep = 0.26,
+      litChance = 0.24,
+      cornerBlades = true,
+    } = options;
+    const { glass, mullion } = mat;
+    const midY = y0 + height / 2;
+    addBox(parent, width, height, depth, glass, 0, midY, 0, { cast: true, receive: true });
+
+    const columns = Math.max(3, Math.round(width / finStep));
+    const rows = Math.max(3, Math.round(depth / finStep));
+    for (let index = 0; index < columns; index += 1) {
+      const x = -width / 2 + (width / columns) * (index + 0.5);
+      for (const side of [-1, 1]) {
+        addBox(parent, 0.03, height, 0.05, mullion, x, midY, side * (depth / 2 + 0.014), {
+          cast: false,
+          receive: false,
+        });
+      }
+    }
+    for (let index = 0; index < rows; index += 1) {
+      const z = -depth / 2 + (depth / rows) * (index + 0.5);
+      for (const side of [-1, 1]) {
+        addBox(parent, 0.05, height, 0.03, mullion, side * (width / 2 + 0.014), midY, z, {
+          cast: false,
+          receive: false,
+        });
+      }
+    }
+    if (cornerBlades) {
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const blade = addBox(parent, 0.15, height + 0.02, 0.15, mullion, (sx * width) / 2, midY, (sz * depth) / 2, {
+            cast: false,
+            receive: false,
+          });
+          blade.rotation.y = Math.PI / 4;
+        }
+      }
+    }
+
+    const floorCount = Math.max(2, Math.round(floors));
+    for (let floor = bandEvery; floor < floorCount; floor += bandEvery) {
+      addBox(parent, width + 0.045, 0.02, depth + 0.045, mullion, 0, y0 + (floor * height) / floorCount, 0, {
+        cast: false,
+        receive: false,
+      });
+    }
+    for (let floor = 0; floor < floorCount; floor += 1) {
+      if (rng() >= litChance) continue;
+      addBox(
+        parent,
+        width + 0.008,
+        (height / floorCount) * 0.44,
+        depth + 0.008,
+        towerWindowMaterial,
+        0,
+        y0 + ((floor + 0.5) * height) / floorCount,
+        0,
+        { cast: false, receive: false }
+      );
+    }
+    return midY;
+  }
+
+  function addMechanicalBand(parent, options) {
+    const { width, depth, y, mat } = options;
+    addBox(parent, width + 0.07, 0.1, depth + 0.07, mat.dark, 0, y, 0, {
+      cast: false,
+      receive: false,
+    });
+    addBox(parent, width + 0.075, 0.014, depth + 0.075, mat.accent, 0, y + 0.056, 0, {
+      cast: false,
+      receive: false,
+    });
+  }
+
+  function addSkyscraperRoof(parent, options) {
+    const { width, depth, y, mat, machinery = true } = options;
+    addBox(parent, width + 0.08, 0.05, depth + 0.08, mat.mullion, 0, y + 0.025, 0);
+    if (machinery) {
+      addBox(parent, width * 0.6, 0.26, depth * 0.5, mat.dark, 0, y + 0.18, 0);
+      addBox(parent, width * 0.66, 0.035, depth * 0.56, mat.mullion, 0, y + 0.33, 0, {
+        cast: false,
+      });
+      addBox(parent, width * 0.24, 0.2, depth * 0.24, mat.dark, width * 0.18, y + 0.15, -depth * 0.14);
+    }
+    addBox(parent, width + 0.02, 0.012, depth + 0.02, mat.accent, 0, y + 0.056, 0, {
+      cast: false,
+      receive: false,
+    });
+    return y + 0.38;
+  }
+
+  function addTowerAntenna(parent, options) {
+    const { x = 0, z = 0, y, height = 1.5, mat, beacon = true } = options;
+    addBox(parent, 0.03, height, 0.03, mat.dark, x, y + height / 2, z, {
+      cast: false,
+      receive: false,
+    });
+    for (const level of [0.3, 0.62]) {
+      addBox(parent, 0.1, 0.02, 0.1, mat.mullion, x, y + height * level, z, {
+        cast: false,
+        receive: false,
+      });
+    }
+    if (beacon) {
+      const light = addBox(parent, 0.075, 0.075, 0.075, beaconMat, x, y + height + 0.04, z, {
+        cast: false,
+        receive: false,
+      });
+      beacons.push({ mesh: light, phase: rng() * TAU });
+    }
+  }
+
+  function addSpireCrown(parent, options) {
+    const { width, depth, y, mat, spireHeight = 1.2 } = options;
+    addBox(parent, width * 0.9, 0.08, depth * 0.9, mat.mullion, 0, y + 0.04, 0);
+    addBox(parent, width * 0.82, 0.34, depth * 0.82, mat.glass, 0, y + 0.25, 0, {
+      cast: false,
+    });
+    const ribs = 8;
+    for (let index = 0; index < ribs; index += 1) {
+      const angle = (index / ribs) * TAU;
+      addBox(
+        parent,
+        0.03,
+        0.34,
+        0.03,
+        mat.mullion,
+        Math.cos(angle) * width * 0.4,
+        y + 0.25,
+        Math.sin(angle) * depth * 0.4,
+        { cast: false, receive: false }
+      );
+    }
+    addBox(parent, width * 0.86, 0.04, depth * 0.86, mat.accent, 0, y + 0.44, 0, {
+      cast: false,
+      receive: false,
+    });
+    addPyramid(parent, width * 0.66, spireHeight, depth * 0.66, mat.roof, 0, y + 0.46, 0, Math.PI / 4);
+    addBox(parent, 0.028, 0.4, 0.028, mat.dark, 0, y + 0.46 + spireHeight + 0.2, 0, {
+      cast: false,
+    });
+    const light = addBox(parent, 0.08, 0.08, 0.08, beaconMat, 0, y + 0.46 + spireHeight + 0.44, 0, {
+      cast: false,
+      receive: false,
+    });
+    beacons.push({ mesh: light, phase: rng() * TAU });
+    return y + 0.46 + spireHeight + 0.5;
+  }
+
+  function addObservationCrown(parent, options) {
+    const { width, depth, y, mat, lanternHeight = 0.7 } = options;
+    addBox(parent, width * 1.24, 0.06, depth * 1.24, mat.mullion, 0, y + 0.03, 0);
+    addBox(parent, width * 1.12, 0.3, depth * 1.12, mat.glass, 0, y + 0.21, 0, { cast: false });
+    const ribs = 14;
+    for (let index = 0; index < ribs; index += 1) {
+      const angle = (index / ribs) * TAU;
+      addBox(
+        parent,
+        0.035,
+        0.32,
+        0.035,
+        mat.mullion,
+        Math.cos(angle) * width * 0.55,
+        y + 0.21,
+        Math.sin(angle) * depth * 0.55,
+        { cast: false, receive: false }
+      );
+    }
+    addBox(parent, width * 1.2, 0.05, depth * 1.2, mat.mullion, 0, y + 0.4, 0);
+    addBox(parent, width * 1.17, 0.02, depth * 1.17, mat.accent, 0, y + 0.43, 0, {
+      cast: false,
+      receive: false,
+    });
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const strut = addBox(parent, 0.04, 0.34, 0.04, mat.mullion, sx * width * 0.5, y - 0.15, sz * depth * 0.5, {
+          cast: false,
+        });
+        strut.rotation.z = sx * 0.5;
+        strut.rotation.x = sz * 0.5;
+      }
+    }
+
+    addBox(parent, width * 0.62, lanternHeight, depth * 0.62, mat.glass, 0, y + 0.46 + lanternHeight / 2, 0, {
+      cast: false,
+    });
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        addBox(parent, 0.05, lanternHeight, 0.05, mat.mullion, sx * width * 0.3, y + 0.46 + lanternHeight / 2, sz * depth * 0.3, {
+          cast: false,
+        });
+      }
+    }
+    addBox(parent, width * 0.68, 0.05, depth * 0.68, mat.mullion, 0, y + 0.46 + lanternHeight + 0.02, 0);
+    addBox(parent, width * 0.66, 0.02, depth * 0.66, mat.accent, 0, y + 0.46 + lanternHeight + 0.055, 0, {
+      cast: false,
+      receive: false,
+    });
+    addPyramid(parent, width * 0.42, 0.9, depth * 0.42, mat.roof, 0, y + 0.5 + lanternHeight, 0, Math.PI / 4);
+    addTowerAntenna(parent, { y: y + 0.5 + lanternHeight + 0.92, height: 0.9, mat });
+    return y + 0.5 + lanternHeight + 1.9;
+  }
+
+  function addSkyTerrace(parent, options) {
+    const { x, z, width, depth, y, side, mat } = options;
+    const out = 0.42;
+    let sx = x;
+    let sz = z;
+    let terraceWidth = width * 0.86;
+    let terraceDepth = depth * 0.86;
+    if (side === "s") {
+      sz = z + depth / 2 + out / 2;
+      terraceDepth = out;
+    } else if (side === "n") {
+      sz = z - depth / 2 - out / 2;
+      terraceDepth = out;
+    } else if (side === "e") {
+      sx = x + width / 2 + out / 2;
+      terraceWidth = out;
+    } else {
+      sx = x - width / 2 - out / 2;
+      terraceWidth = out;
+    }
+    addBox(parent, terraceWidth, 0.05, terraceDepth, mat.mullion, sx, y, sz, { cast: false });
+    addBox(
+      parent,
+      terraceWidth * 0.84,
+      0.035,
+      terraceDepth * 0.68,
+      standard("#6f8f5c", { roughness: 0.98 }),
+      sx,
+      y + 0.04,
+      sz,
+      { cast: false }
+    );
+    addBush(parent, sx - terraceWidth * 0.24, sz, 0.42, y + 0.06);
+    addBush(parent, sx + terraceWidth * 0.2, sz, 0.34, y + 0.06);
+    return y + 0.1;
+  }
+
+  function addOctagonShaft(parent, options) {
+    const { width, depth, height, y0, floors, mat, litChance = 0.2 } = options;
+    const midY = y0 + height / 2;
+    addOctagon(parent, width, height, depth, mat.glass, 0, midY, 0);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = Math.PI / 8 + (index / 8) * TAU;
+      const rib = addBox(
+        parent,
+        0.05,
+        height,
+        0.05,
+        mat.mullion,
+        Math.cos(angle) * width * 0.49,
+        midY,
+        Math.sin(angle) * depth * 0.49,
+        { cast: false, receive: false }
+      );
+      rib.rotation.y = -angle;
+    }
+    const floorCount = Math.max(2, Math.round(floors));
+    for (let floor = 2; floor < floorCount; floor += 2) {
+      addOctagon(parent, width + 0.015, 0.018, depth + 0.015, mat.mullion, 0, y0 + (floor * height) / floorCount, 0, {
+        cast: false,
+        receive: false,
+      });
+    }
+    for (let floor = 0; floor < floorCount; floor += 1) {
+      if (rng() >= litChance) continue;
+      addOctagon(
+        parent,
+        width + 0.006,
+        (height / floorCount) * 0.42,
+        depth + 0.006,
+        towerWindowMaterial,
+        0,
+        y0 + ((floor + 0.5) * height) / floorCount,
+        0,
+        { cast: false, receive: false }
+      );
+    }
+    return midY;
+  }
+
+  const NAMED_SKYSCRAPERS = new Set([
+    "s-trade",
+    "s-empire",
+    "s-chrysler",
+    "s-burj",
+    "s-taipei",
+    "s-petronas",
+    "s-onewtc",
+  ]);
+
+  function finishSkyscraper(root, options) {
+    const { def, label, role, width, depth, topY, bodyTop, color, style } = options;
+    const model = def.model;
+    const floors = Math.round(rand(rng, model.floors[0], model.floors[1]));
+    const height = Math.round(rand(rng, model.tall[0], model.tall[1]));
+    const record = {
+      id: `${label}-${buildings.length}`,
+      name: makeName("downtown", label),
+      kind: "skyscraper",
+      label,
+      floors,
+      height,
+      population: 0,
+      jobs: Math.round(floors * 34 + width * depth * 120),
+      occupancy: Math.round(rand(rng, 0.62, 0.97) * 100),
+      year: 2039 + Math.floor(rng() * 16),
+      color,
+      note: def.description,
+      address: `BLOCK ${label} · 像素湾中心区`,
+      landmark: role === "landmark",
+      root,
+      footprint: { width, depth },
+      style,
+      topY,
+      bodyTop,
+      isSupertall: true,
+      typeId: def.id,
+      typeLabel: `${def.en} / ${def.name}`,
+      description: def.description,
+      family: def.family,
+    };
+    if (NAMED_SKYSCRAPERS.has(def.id)) {
+      record.name = usedNames.has(def.name) ? `${def.name}·${label}` : def.name;
+      usedNames.add(record.name);
+    }
+    if (role === "landmark") record.name = def.name;
+    addBuildingInfo(root, record);
+    return record;
+  }
+
+  function addSkyscraperBlock({ blockGroup, localX, localZ, lot, def, label, role = null, rotation = 0 }) {
+    const model = def.model;
+    const style = model.style ?? "pinnacle";
+    const root = new THREE.Group();
+    root.position.set(localX, BLOCK_TOP, localZ);
+    root.rotation.y = rotation;
+    blockGroup.add(root);
+
+    const width = Math.min(lot.w + 1.0, rand(rng, model.width[0], model.width[1]));
+    const depth = Math.min(lot.d + 0.6, rand(rng, model.depth[0], model.depth[1]));
+    const rise = rand(rng, model.rise[0], model.rise[1]);
+    const wallColor = choose(rng, model.walls);
+    const accentColor = model.accent ?? "#ffd166";
+    const mat = {
+      glass: standard(model.glass ?? "#8fb8c4", { roughness: 0.2, metalness: 0.46 }),
+      mullion: standard(model.mullion ?? "#d9ddd6", { roughness: 0.34, metalness: 0.42 }),
+      dark: standard("#2c363d", { roughness: 0.42, metalness: 0.4 }),
+      accent: standard(accentColor, {
+        emissive: accentColor,
+        emissiveIntensity: 0.1,
+        roughness: 0.45,
+        metalness: 0.2,
+      }),
+      roof: standard(model.roof ?? "#46545c", { roughness: 0.55, metalness: 0.18 }),
+      trim: standard(wallColor, { roughness: 0.52, metalness: 0.2 }),
+    };
+    neonMaterials.push(mat.accent);
+
+    const visualFloors = (height) => Math.max(6, Math.round(height / (FLOOR_HEIGHT * 0.92)));
+    let topY = 0;
+    let bodyTop = 0;
+
+    if (style === "wtc") {
+      const span = width * 1.06;
+      addSkyscraperPlaza(root, span, mat);
+      const gap = Math.max(0.5, width * 0.21);
+      const towerWidth = (width - gap) / 2;
+      const towerDepth = Math.min(depth, towerWidth * 1.08);
+      const offset = (towerWidth + gap) / 2;
+      const towerRise = [rise, rise * 0.992];
+      let tallest = 0;
+      for (let index = 0; index < 2; index += 1) {
+        const towerX = (index === 0 ? -1 : 1) * offset;
+        const towerGroup = new THREE.Group();
+        towerGroup.position.x = towerX;
+        root.add(towerGroup);
+        const lobbyTop = addSkyscraperLobby(towerGroup, {
+          width: towerWidth * 0.98,
+          depth: towerDepth * 0.98,
+          height: 0.58,
+          mat,
+        });
+        const height = towerRise[index];
+        addCurtainWall(towerGroup, {
+          width: towerWidth,
+          depth: towerDepth,
+          height,
+          y0: lobbyTop,
+          floors: visualFloors(height),
+          mat,
+          finStep: 0.19,
+          bandEvery: 2,
+          litChance: 0.26,
+        });
+        const top = lobbyTop + height;
+        addSkyscraperRoof(towerGroup, { width: towerWidth, depth: towerDepth, y: top, mat, machinery: true });
+        addTowerAntenna(towerGroup, {
+          y: top + 0.36,
+          height: index === 0 ? 1.95 : 1.35,
+          mat,
+        });
+        tallest = Math.max(tallest, top + 0.36 + (index === 0 ? 1.95 : 1.35));
+      }
+      addBox(root, gap + 0.6, 0.14, towerDepth * 0.56, mat.glass, 0, 0.19, 0, { cast: false });
+      addBox(root, gap + 0.66, 0.03, towerDepth * 0.6, mat.mullion, 0, 0.28, 0, { cast: false });
+      bodyTop = Math.max(bodyTop, tallest - 2.3);
+      topY = tallest;
+    } else if (style === "twinbridge") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.12, mat);
+      const gap = Math.max(0.48, width * 0.16);
+      const towerWidth = (width - gap) / 2;
+      const towerDepth = depth;
+      const offset = (towerWidth + gap) / 2;
+      const heights = [rise, rise * 0.84];
+      const tops = [];
+      for (let index = 0; index < 2; index += 1) {
+        const towerX = (index === 0 ? -1 : 1) * offset;
+        const towerGroup = new THREE.Group();
+        towerGroup.position.x = towerX;
+        root.add(towerGroup);
+        const lobbyTop = addSkyscraperLobby(towerGroup, {
+          width: towerWidth * 0.96,
+          depth: towerDepth * 0.96,
+          height: 0.5,
+          mat,
+        });
+        const height = heights[index];
+        addCurtainWall(towerGroup, {
+          width: towerWidth,
+          depth: towerDepth,
+          height,
+          y0: lobbyTop,
+          floors: visualFloors(height),
+          mat,
+          finStep: 0.22,
+          litChance: 0.28,
+        });
+        const top = lobbyTop + height;
+        addSkyscraperRoof(towerGroup, { width: towerWidth, depth: towerDepth, y: top, mat, machinery: index === 0 });
+        addTowerAntenna(towerGroup, { y: top + 0.36, height: index === 0 ? 0.9 : 0.6, mat });
+        tops.push(top);
+      }
+      // Skybridge between the two towers.
+      const bridgeY = Math.min(tops[0], tops[1]) - 1.5;
+      addBox(root, gap + 0.24, 0.16, towerDepth * 0.42, mat.mullion, 0, bridgeY, 0, { cast: true });
+      addBox(root, gap + 0.26, 0.05, towerDepth * 0.36, towerWindowMaterial, 0, bridgeY, 0, {
+        cast: false,
+        receive: false,
+      });
+      addBox(root, gap + 0.3, 0.03, towerDepth * 0.46, mat.mullion, 0, bridgeY + 0.09, 0, { cast: false });
+      bodyTop = Math.max(topY - 2, tops[1] - 0.2);
+      topY = Math.max(...tops) + 0.9;
+      bodyTop = tops[1];
+    } else if (style === "pinnacle") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.46, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.08,
+        depth: depth * 1.08,
+        height: 0.62,
+        mat,
+      });
+      const tiers = [
+        { scale: 1, share: 0.44 },
+        { scale: 0.84, share: 0.3 },
+        { scale: 0.7, share: 0.18 },
+      ];
+      let y = lobbyTop;
+      tiers.forEach((tier, index) => {
+        const tierHeight = rise * tier.share;
+        const tierWidth = width * tier.scale;
+        const tierDepth = depth * tier.scale;
+        addCurtainWall(root, {
+          width: tierWidth,
+          depth: tierDepth,
+          height: tierHeight,
+          y0: y,
+          floors: visualFloors(tierHeight),
+          mat,
+          litChance: 0.24,
+        });
+        addBox(root, tierWidth + 0.14, 0.07, tierDepth + 0.14, trimMat, 0, y + tierHeight + 0.035, 0);
+        addBox(root, tierWidth * 0.94, 0.06, tierDepth * 0.94, standard("#6f8a63", { roughness: 0.98 }), 0, y + tierHeight + 0.08, 0, {
+          cast: false,
+        });
+        if (index < 2) {
+          for (const sx of [-1, 1]) {
+            for (const sz of [-1, 1]) {
+              addBox(root, 0.12, 0.34, 0.12, mat.mullion, (sx * tierWidth) / 2, y + tierHeight + 0.22, (sz * tierDepth) / 2, {
+                cast: false,
+              });
+            }
+          }
+        }
+        y += tierHeight + 0.1;
+      });
+      topY = addSpireCrown(root, { width: width * 0.7, depth: depth * 0.7, y, mat, spireHeight: 1.35 });
+      bodyTop = y;
+    } else if (style === "facet") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.4, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.12,
+        depth: depth * 1.12,
+        height: 0.66,
+        mat,
+      });
+      addCurtainWall(root, {
+        width,
+        depth,
+        height: rise,
+        y0: lobbyTop,
+        floors: visualFloors(rise),
+        mat,
+        finStep: 0.3,
+        bandEvery: 4,
+        litChance: 0.14,
+      });
+      const modules = 6;
+      const moduleHeight = rise / modules;
+      const braceAngleX = Math.atan2(moduleHeight, width * 0.86);
+      const braceAngleZ = Math.atan2(moduleHeight, depth * 0.86);
+      for (let module = 0; module < modules; module += 1) {
+        const y = lobbyTop + moduleHeight * (module + 0.5);
+        const direction = module % 2 === 0 ? 1 : -1;
+        const braceLengthX = Math.hypot(moduleHeight, width * 0.86);
+        const braceLengthZ = Math.hypot(moduleHeight, depth * 0.86);
+        for (const side of [-1, 1]) {
+          const brace = addBox(root, braceLengthX, 0.055, 0.055, mat.mullion, 0, y, side * (depth / 2 + 0.035), {
+            cast: false,
+            receive: false,
+          });
+          brace.rotation.z = direction * braceAngleX;
+        }
+        for (const side of [-1, 1]) {
+          const brace = addBox(root, 0.055, 0.055, braceLengthZ, mat.mullion, side * (width / 2 + 0.035), y, 0, {
+            cast: false,
+            receive: false,
+          });
+          brace.rotation.x = -direction * braceAngleZ;
+        }
+        addBox(root, width + 0.08, 0.045, depth + 0.08, mat.mullion, 0, lobbyTop + moduleHeight * (module + 1), 0, {
+          cast: false,
+          receive: false,
+        });
+      }
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const column = addBox(root, 0.17, rise, 0.17, mat.mullion, (sx * width) / 2, lobbyTop + rise / 2, (sz * depth) / 2, {
+            cast: false,
+          });
+          column.rotation.y = Math.PI / 4;
+        }
+      }
+      addMechanicalBand(root, { width, depth, y: lobbyTop + rise * 0.66, mat });
+      const top = lobbyTop + rise;
+      addSkyscraperRoof(root, { width, depth, y: top, mat, machinery: true });
+      addBox(root, width * 0.56, 0.34, depth * 0.56, mat.dark, 0, top + 0.56, 0);
+      addBox(root, width * 0.6, 0.05, depth * 0.6, mat.accent, 0, top + 0.74, 0, {
+        cast: false,
+        receive: false,
+      });
+      topY = addSpireCrown(root, { width: width * 0.56, depth: depth * 0.56, y: top + 0.78, mat, spireHeight: 1.1 });
+      bodyTop = top;
+    } else if (style === "terrace") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.46, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.06,
+        depth: depth * 1.06,
+        height: 0.6,
+        mat,
+      });
+      const coreWidth = width * 0.7;
+      const coreDepth = depth * 0.7;
+      const floors = visualFloors(rise);
+      addCurtainWall(root, {
+        width: coreWidth,
+        depth: coreDepth,
+        height: rise,
+        y0: lobbyTop,
+        floors,
+        mat,
+        litChance: 0.22,
+      });
+      const levels = Math.max(4, Math.floor(floors / 3));
+      const sides = ["s", "e", "n", "w"];
+      for (let level = 1; level <= levels; level += 1) {
+        const y = lobbyTop + (rise * level) / (levels + 1);
+        addSkyTerrace(root, {
+          width: coreWidth,
+          depth: coreDepth,
+          y,
+          side: sides[(level - 1) % 4],
+          mat,
+        });
+        if (level % 2 === 0) {
+          addSkyTerrace(root, {
+            width: coreWidth,
+            depth: coreDepth,
+            y: y + 0.42,
+            side: sides[(level + 1) % 4],
+            mat,
+          });
+        }
+      }
+      const top = lobbyTop + rise;
+      addBox(root, width * 0.9, 0.1, depth * 0.9, trimMat, 0, top + 0.05, 0);
+      addBox(root, width * 0.78, 0.12, depth * 0.78, standard("#6f8f5c", { roughness: 0.98 }), 0, top + 0.15, 0, {
+        cast: false,
+      });
+      addBush(root, width * 0.18, depth * 0.12, 0.6, top + 0.2);
+      addBush(root, -width * 0.2, -depth * 0.1, 0.48, top + 0.2);
+      addBox(root, 0.05, 0.8, 0.05, mat.dark, width * 0.24, top + 0.55, -depth * 0.1, {
+        cast: false,
+      });
+      const light = addBox(root, 0.07, 0.07, 0.07, beaconMat, width * 0.24, top + 1.0, -depth * 0.1, {
+        cast: false,
+        receive: false,
+      });
+      beacons.push({ mesh: light, phase: rng() * TAU });
+      topY = top + 1.0;
+      bodyTop = top;
+    } else if (style === "twist") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.4, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.08,
+        depth: depth * 1.08,
+        height: 0.6,
+        mat,
+      });
+      const segments = 11;
+      const segmentHeight = rise / segments;
+      for (let index = 0; index < segments; index += 1) {
+        const t = index / (segments - 1);
+        const scale = 1 - t * 0.14;
+        const segment = new THREE.Group();
+        segment.position.y = lobbyTop + segmentHeight * (index + 0.5);
+        segment.rotation.y = index * 0.055;
+        root.add(segment);
+        addBox(segment, width * scale, segmentHeight * 1.005, depth * scale, mat.glass, 0, 0, 0, {
+          cast: true,
+        });
+        addBox(segment, width * scale + 0.04, 0.026, depth * scale + 0.04, mat.mullion, 0, segmentHeight / 2, 0, {
+          cast: false,
+          receive: false,
+        });
+        for (const sx of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            addBox(segment, 0.09, segmentHeight, 0.09, mat.mullion, (sx * width * scale) / 2, 0, (sz * depth * scale) / 2, {
+              cast: false,
+              receive: false,
+            });
+          }
+        }
+        for (let fin = 0; fin < 2; fin += 1) {
+          const offset = (fin === 0 ? -1 : 1) * 0.18 * width * scale;
+          addBox(segment, 0.04, segmentHeight, 0.05, mat.mullion, offset, 0, (depth * scale) / 2 + 0.012, {
+            cast: false,
+            receive: false,
+          });
+          addBox(segment, 0.05, segmentHeight, 0.04, mat.mullion, (width * scale) / 2 + 0.012, 0, offset, {
+            cast: false,
+            receive: false,
+          });
+        }
+        if (index % 3 === 0) {
+          addBox(segment, width * scale * 0.62, segmentHeight * 0.5, depth * scale * 0.62, mat.accent, 0, 0, 0, {
+            cast: false,
+            receive: false,
+          });
+        }
+      }
+      const top = lobbyTop + rise;
+      addBox(root, width * 0.78, 0.08, depth * 0.78, mat.mullion, 0, top + 0.04, 0);
+      addBox(root, width * 0.6, 0.2, depth * 0.6, mat.dark, 0, top + 0.18, 0);
+      topY = addSpireCrown(root, { width: width * 0.56, depth: depth * 0.56, y: top + 0.3, mat, spireHeight: 1.2 });
+      bodyTop = top;
+    } else if (style === "deco") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.44, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.12,
+        depth: depth * 1.12,
+        height: 0.72,
+        mat,
+      });
+      const tiers = [
+        { scale: 1, share: 0.34 },
+        { scale: 0.82, share: 0.26 },
+        { scale: 0.64, share: 0.2 },
+        { scale: 0.46, share: 0.12 },
+      ];
+      let y = lobbyTop;
+      tiers.forEach((tier) => {
+        const tierHeight = rise * tier.share;
+        const tierWidth = width * tier.scale;
+        const tierDepth = depth * tier.scale;
+        addCurtainWall(root, {
+          width: tierWidth,
+          depth: tierDepth,
+          height: tierHeight,
+          y0: y,
+          floors: visualFloors(tierHeight),
+          mat,
+          finStep: 0.2,
+          bandEvery: 2,
+          litChance: 0.16,
+        });
+        addBox(root, tierWidth + 0.16, 0.07, tierDepth + 0.16, trimMat, 0, y + tierHeight + 0.035, 0);
+        addBox(root, tierWidth + 0.04, 0.03, tierDepth + 0.04, mat.mullion, 0, y + tierHeight + 0.085, 0, {
+          cast: false,
+        });
+        y += tierHeight + 0.09;
+      });
+      addBox(root, width * 0.46, 0.42, depth * 0.46, mat.trim, 0, y + 0.21, 0);
+      addBox(root, width * 0.36, 0.3, depth * 0.36, mat.mullion, 0, y + 0.57, 0);
+      addBox(root, width * 0.27, 0.24, depth * 0.27, mat.trim, 0, y + 0.84, 0);
+      addBox(root, width * 0.3, 0.045, depth * 0.3, mat.accent, 0, y + 0.98, 0, {
+        cast: false,
+        receive: false,
+      });
+      addCylinder(root, width * 0.07, 0.42, mat.mullion, 0, y + 1.05, 0);
+      addCylinder(root, width * 0.045, 0.5, mat.mullion, 0, y + 1.45, 0);
+      addBox(root, 0.06, 0.03, 0.06, mat.accent, 0, y + 1.3, 0, { cast: false, receive: false });
+      addTowerAntenna(root, { y: y + 1.6, height: 1.1, mat });
+      topY = y + 3.1;
+      bodyTop = y;
+    } else if (style === "chrysler") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.42, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.1,
+        depth: depth * 1.1,
+        height: 0.68,
+        mat,
+      });
+      const tiers = [
+        { scale: 1, share: 0.42 },
+        { scale: 0.88, share: 0.3 },
+        { scale: 0.78, share: 0.18 },
+      ];
+      let y = lobbyTop;
+      tiers.forEach((tier) => {
+        const tierHeight = rise * tier.share;
+        const tierWidth = width * tier.scale;
+        const tierDepth = depth * tier.scale;
+        addCurtainWall(root, {
+          width: tierWidth,
+          depth: tierDepth,
+          height: tierHeight,
+          y0: y,
+          floors: visualFloors(tierHeight),
+          mat,
+          finStep: 0.2,
+          bandEvery: 2,
+          litChance: 0.18,
+        });
+        addBox(root, tierWidth + 0.14, 0.06, tierDepth + 0.14, trimMat, 0, y + tierHeight + 0.03, 0);
+        y += tierHeight + 0.08;
+      });
+      const crownScales = [0.7, 0.62, 0.54, 0.46, 0.38, 0.3];
+      crownScales.forEach((scale, index) => {
+        const crownWidth = width * scale;
+        const crownDepth = depth * scale;
+        addBox(root, crownWidth, 0.17, crownDepth, index % 3 === 0 ? mat.trim : mat.mullion, 0, y + 0.085, 0);
+        addBox(root, crownWidth + 0.018, 0.012, crownDepth + 0.018, mat.accent, 0, y + 0.175, 0, {
+          cast: false,
+          receive: false,
+        });
+        if (index < 4) {
+          for (const sx of [-1, 1]) {
+            addBox(root, 0.035, 0.1, 0.02, mat.accent, (sx * crownWidth) / 2, y + 0.09, crownDepth / 2 + 0.01, {
+              cast: false,
+              receive: false,
+            });
+          }
+        }
+        y += 0.17;
+      });
+      addBox(root, 0.05, 1.5, 0.05, mat.mullion, 0, y + 0.75, 0, { cast: false });
+      const light = addBox(root, 0.07, 0.07, 0.07, beaconMat, 0, y + 1.52, 0, {
+        cast: false,
+        receive: false,
+      });
+      beacons.push({ mesh: light, phase: rng() * TAU });
+      topY = y + 1.6;
+      bodyTop = y;
+    } else if (style === "tiered") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.36, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.1,
+        depth: depth * 1.1,
+        height: 0.7,
+        mat,
+      });
+      const tiers = [
+        { scale: 1, share: 0.24, dx: 0, dz: 0 },
+        { scale: 0.93, share: 0.18, dx: 0.09, dz: 0.03 },
+        { scale: 0.86, share: 0.15, dx: 0.13, dz: -0.05 },
+        { scale: 0.79, share: 0.12, dx: -0.08, dz: 0.07 },
+        { scale: 0.71, share: 0.1, dx: -0.12, dz: -0.04 },
+        { scale: 0.62, share: 0.08, dx: 0.06, dz: 0.07 },
+        { scale: 0.52, share: 0.06, dx: 0.09, dz: -0.05 },
+        { scale: 0.42, share: 0.04, dx: -0.04, dz: 0.03 },
+      ];
+      let y = lobbyTop;
+      tiers.forEach((tier) => {
+        const tierHeight = rise * tier.share;
+        const tierGroup = new THREE.Group();
+        tierGroup.position.set(tier.dx, 0, tier.dz);
+        root.add(tierGroup);
+        addCurtainWall(tierGroup, {
+          width: width * tier.scale,
+          depth: depth * tier.scale,
+          height: tierHeight,
+          y0: y,
+          floors: visualFloors(tierHeight),
+          mat,
+          finStep: 0.24,
+          bandEvery: 3,
+          litChance: 0.2,
+        });
+        addBox(
+          root,
+          width * tier.scale + 0.1,
+          0.05,
+          depth * tier.scale + 0.1,
+          mat.mullion,
+          tier.dx,
+          y + tierHeight + 0.025,
+          tier.dz,
+          { cast: false }
+        );
+        y += tierHeight + 0.05;
+      });
+      addBox(root, width * 0.32, 0.3, depth * 0.32, mat.mullion, 0, y + 0.15, 0);
+      addPyramid(root, width * 0.26, 1.9, depth * 0.26, mat.roof, 0, y + 0.3, 0, Math.PI / 4);
+      const light = addBox(root, 0.07, 0.07, 0.07, beaconMat, 0, y + 2.24, 0, {
+        cast: false,
+        receive: false,
+      });
+      beacons.push({ mesh: light, phase: rng() * TAU });
+      topY = y + 2.3;
+      bodyTop = y;
+    } else if (style === "pagoda") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.44, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.12,
+        depth: depth * 1.12,
+        height: 0.68,
+        mat,
+      });
+      const segments = 8;
+      const segmentHeight = (rise * 0.86) / segments;
+      let y = lobbyTop;
+      for (let index = 0; index < segments; index += 1) {
+        const scale = 1 - index * 0.008;
+        const segmentWidth = width * scale;
+        const segmentDepth = depth * scale;
+        addCurtainWall(root, {
+          width: segmentWidth,
+          depth: segmentDepth,
+          height: segmentHeight,
+          y0: y,
+          floors: visualFloors(segmentHeight),
+          mat,
+          finStep: 0.24,
+          bandEvery: 2,
+          litChance: 0.24,
+        });
+        addBox(root, segmentWidth + 0.38, 0.1, segmentDepth + 0.38, trimMat, 0, y + segmentHeight + 0.05, 0);
+        addBox(
+          root,
+          segmentWidth + 0.44,
+          0.025,
+          segmentDepth + 0.44,
+          mat.accent,
+          0,
+          y + segmentHeight + 0.113,
+          0,
+          { cast: false, receive: false }
+        );
+        for (const sx of [-1, 1]) {
+          for (const sz of [-1, 1]) {
+            addBox(
+              root,
+              0.12,
+              0.17,
+              0.12,
+              mat.mullion,
+              (sx * segmentWidth) / 2,
+              y + segmentHeight + 0.14,
+              (sz * segmentDepth) / 2,
+              { cast: false }
+            );
+          }
+        }
+        y += segmentHeight + 0.18;
+      }
+      addBox(root, width * 0.5, 0.58, depth * 0.5, mat.glass, 0, y + 0.29, 0, { cast: false });
+      addBox(root, width * 0.56, 0.06, depth * 0.56, mat.mullion, 0, y + 0.61, 0);
+      addBox(root, width * 0.52, 0.02, depth * 0.52, mat.accent, 0, y + 0.66, 0, {
+        cast: false,
+        receive: false,
+      });
+      addBox(root, 0.06, 1.5, 0.06, mat.mullion, 0, y + 1.36, 0, { cast: false });
+      addBox(root, 0.2, 0.03, 0.2, mat.mullion, 0, y + 2.0, 0, { cast: false });
+      const light = addBox(root, 0.07, 0.07, 0.07, beaconMat, 0, y + 2.18, 0, {
+        cast: false,
+        receive: false,
+      });
+      beacons.push({ mesh: light, phase: rng() * TAU });
+      topY = y + 2.25;
+      bodyTop = y + 0.66;
+    } else if (style === "petronas") {
+      const span = width * 1.08;
+      addSkyscraperPlaza(root, span, mat);
+      const gap = Math.max(0.52, width * 0.19);
+      const towerWidth = (width - gap) / 2;
+      const towerDepth = depth * 0.92;
+      const offset = (towerWidth + gap) / 2;
+      let tallest = 0;
+      let bridgeBase = 0;
+      for (let index = 0; index < 2; index += 1) {
+        const towerX = (index === 0 ? -1 : 1) * offset;
+        const towerGroup = new THREE.Group();
+        towerGroup.position.x = towerX;
+        root.add(towerGroup);
+        const lobbyTop = addSkyscraperLobby(towerGroup, {
+          width: towerWidth * 0.98,
+          depth: towerDepth * 0.98,
+          height: 0.52,
+          mat,
+        });
+        if (index === 0) bridgeBase = lobbyTop;
+        const towerRise = index === 0 ? rise : rise * 0.996;
+        let y = lobbyTop;
+        const tiers = [
+          { scale: 1, share: 0.62 },
+          { scale: 0.86, share: 0.2 },
+          { scale: 0.72, share: 0.12 },
+        ];
+        tiers.forEach((tier) => {
+          const tierHeight = towerRise * tier.share;
+          const tierWidth = towerWidth * tier.scale;
+          const tierDepth = towerDepth * tier.scale;
+          addCurtainWall(towerGroup, {
+            width: tierWidth,
+            depth: tierDepth,
+            height: tierHeight,
+            y0: y,
+            floors: visualFloors(tierHeight),
+            mat,
+            finStep: 0.2,
+            bandEvery: 2,
+            litChance: 0.26,
+          });
+          addBox(towerGroup, tierWidth + 0.08, 0.045, tierDepth + 0.08, mat.mullion, 0, y + tierHeight + 0.022, 0);
+          addBox(towerGroup, tierWidth + 0.03, 0.012, tierDepth + 0.03, mat.accent, 0, y + tierHeight + 0.053, 0, {
+            cast: false,
+            receive: false,
+          });
+          y += tierHeight + 0.07;
+        });
+        addBox(towerGroup, 0.055, 1.2, 0.055, mat.mullion, 0, y + 0.6, 0, { cast: false });
+        addBox(towerGroup, 0.16, 0.035, 0.16, mat.mullion, 0, y + 0.9, 0, { cast: false });
+        const light = addBox(towerGroup, 0.07, 0.07, 0.07, beaconMat, 0, y + 1.26, 0, {
+          cast: false,
+          receive: false,
+        });
+        beacons.push({ mesh: light, phase: rng() * TAU });
+        tallest = Math.max(tallest, y + 1.3);
+      }
+      const bridgeY = bridgeBase + rise * 0.42;
+      addBox(root, gap + 0.3, 0.1, towerDepth * 0.24, mat.mullion, 0, bridgeY, 0, { cast: true });
+      addBox(root, gap + 0.32, 0.04, towerDepth * 0.18, towerWindowMaterial, 0, bridgeY, 0, {
+        cast: false,
+        receive: false,
+      });
+      addBox(root, gap + 0.3, 0.08, towerDepth * 0.18, mat.mullion, 0, bridgeY + 0.16, 0);
+      addBox(root, gap + 0.32, 0.03, towerDepth * 0.14, towerWindowMaterial, 0, bridgeY + 0.16, 0, {
+        cast: false,
+        receive: false,
+      });
+      topY = tallest;
+      bodyTop = tallest - 1.3;
+    } else if (style === "onewtc") {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.46, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.1,
+        depth: depth * 1.1,
+        height: 0.72,
+        mat,
+      });
+      const tiers = [
+        { scale: 1, share: 0.46, rotation: 0 },
+        { scale: 0.94, share: 0.28, rotation: 0.12 },
+        { scale: 0.88, share: 0.16, rotation: 0.24 },
+        { scale: 0.8, share: 0.08, rotation: 0.36 },
+      ];
+      let y = lobbyTop;
+      tiers.forEach((tier) => {
+        const tierHeight = rise * tier.share;
+        const tierGroup = new THREE.Group();
+        tierGroup.position.y = y;
+        tierGroup.rotation.y = tier.rotation;
+        root.add(tierGroup);
+        addCurtainWall(tierGroup, {
+          width: width * tier.scale,
+          depth: depth * tier.scale,
+          height: tierHeight,
+          y0: 0,
+          floors: visualFloors(tierHeight),
+          mat,
+          finStep: 0.24,
+          bandEvery: 2,
+          litChance: 0.24,
+        });
+        addBox(tierGroup, width * tier.scale + 0.05, 0.03, depth * tier.scale + 0.05, mat.mullion, 0, tierHeight + 0.015, 0, {
+          cast: false,
+        });
+        y += tierHeight;
+      });
+      const crownGroup = new THREE.Group();
+      crownGroup.position.y = y;
+      crownGroup.rotation.y = 0.36;
+      root.add(crownGroup);
+      addBox(crownGroup, width * 0.64, 0.44, depth * 0.64, mat.glass, 0, 0.22, 0, { cast: false });
+      addBox(crownGroup, width * 0.68, 0.05, depth * 0.68, mat.mullion, 0, 0.465, 0, { cast: false });
+      addBox(crownGroup, width * 0.66, 0.016, depth * 0.66, mat.accent, 0, 0.495, 0, {
+        cast: false,
+        receive: false,
+      });
+      addCylinder(root, width * 0.09, 0.3, mat.mullion, 0, y + 0.6, 0);
+      addTowerAntenna(root, { y: y + 0.72, height: 2.1, mat });
+      topY = y + 3.1;
+      bodyTop = y;
+    } else {
+      addSkyscraperPlaza(root, Math.max(width, depth) * 1.5, mat);
+      const lobbyTop = addSkyscraperLobby(root, {
+        width: width * 1.14,
+        depth: depth * 1.14,
+        height: 0.72,
+        mat,
+      });
+      const tiers = [
+        { scale: 1, share: 0.34 },
+        { scale: 0.9, share: 0.28 },
+        { scale: 0.8, share: 0.22 },
+        { scale: 0.7, share: 0.14 },
+      ];
+      let y = lobbyTop;
+      tiers.forEach((tier, index) => {
+        const tierHeight = rise * tier.share;
+        const tierWidth = width * tier.scale;
+        const tierDepth = depth * tier.scale;
+        addOctagonShaft(root, {
+          width: tierWidth,
+          depth: tierDepth,
+          height: tierHeight,
+          y0: y,
+          floors: visualFloors(tierHeight),
+          mat,
+          litChance: 0.22,
+        });
+        addOctagon(root, tierWidth + 0.16, 0.06, tierDepth + 0.16, mat.mullion, 0, y + tierHeight + 0.03, 0, {
+          cast: false,
+        });
+        if (index === 2) {
+          addObservationCrown(root, { width: tierWidth, depth: tierDepth, y: y + tierHeight + 0.1, mat });
+        }
+        y += tierHeight + 0.12;
+      });
+      topY = addSpireCrown(root, { width: width * 0.6, depth: depth * 0.6, y, mat, spireHeight: 1.5 });
+      bodyTop = y;
+    }
+
+    const record = finishSkyscraper(root, {
+      def,
+      label,
+      role,
+      width,
+      depth,
+      topY,
+      bodyTop,
+      color: wallColor,
+      style,
+    });
+    return record;
   }
 
   function addBusShelter(parent, x, z, rotation = 0, baseY = BLOCK_TOP) {
@@ -3141,221 +4130,6 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     });
   }
 
-  function addCatalogParkBlock(blockGroup, blockX, blockZ, label, parkDef) {
-    const parkType = parkDef?.model.park ?? "fountain";
-    const feature = new THREE.Group();
-    feature.rotation.y = Math.floor(rng() * 4) * (Math.PI / 2);
-    blockGroup.add(feature);
-    const baseY = BLOCK_TOP;
-    const addTreeHere = (x, z, scale = 0.7, species = null) =>
-      addTree(feature, x, z, scale, baseY, species);
-
-    if (parkType === "pocket") {
-      addBox(feature, 2.2, 0.03, 0.48, pathMat, 0, baseY + 0.012, 1.72, { cast: false });
-      addBox(feature, 0.48, 0.03, 1.8, pathMat, -1.55, baseY + 0.012, 0.3, { cast: false });
-      addTreeHere(-1.55, -1.45, 0.72, "broadleaf");
-      addTreeHere(1.55, -1.28, 0.56, "cherry");
-      addBench(feature, 0.7, 1.72, Math.PI, baseY);
-      addBush(feature, 1.9, 1.7, 0.7, baseY);
-      addFlowers(feature, 0.2, 1.9, baseY);
-      addPlanter(feature, -2.05, 1.9, 0, baseY);
-    } else if (parkType === "playground") {
-      addBox(feature, 3.3, 0.035, 2.7, sandMat, 0, baseY + 0.015, 0, { cast: false });
-      addBox(feature, 5.2, 0.03, 0.55, pathMat, 0, baseY + 0.012, 2.2, { cast: false });
-      addPlayground(feature, 0, 0.15, baseY);
-      addBench(feature, -1.8, 2.22, 0, baseY);
-      addBench(feature, 1.8, 2.22, 0, baseY);
-      addTreeHere(-2.15, -1.75, 0.6, "broadleaf");
-      addTreeHere(2.1, -1.8, 0.54, "cherry");
-      addFlowers(feature, -1.9, 1.6, baseY);
-    } else if (parkType === "sports") {
-      addBox(feature, 5.25, 0.03, 0.6, pathMat, 0, baseY + 0.012, 2.05, { cast: false });
-      addSportsCourt(feature, 0, 0, 0, baseY);
-      addTreeHere(-2.25, -1.9, 0.55, "conifer");
-      addTreeHere(2.25, 1.9, 0.55, "broadleaf");
-      addPlanter(feature, -2.2, 1.9, 0, baseY);
-    } else if (parkType === "botanical") {
-      addBox(feature, 2.0, 0.03, 0.56, pathMat, 0, baseY + 0.012, 1.9, { cast: false });
-      addBox(feature, 0.56, 0.03, 3.3, pathMat, 1.65, baseY + 0.013, 0.2, { cast: false });
-      addGreenhouse(feature, -1.1, 1.0, 0.08, baseY);
-      addTreeHere(-1.9, -1.8, 0.58, "palm");
-      addTreeHere(0.3, -1.9, 0.5, "palm");
-      addTreeHere(2.1, -1.7, 0.45, "broadleaf");
-      for (let index = 0; index < 3; index += 1) {
-        addBox(feature, 0.34, 0.08, 0.75, standard("#8d6d4d"), 0.5 + index * 0.56, baseY + 0.05, 1.96, {
-          cast: false,
-        });
-        addFlowers(feature, 0.5 + index * 0.56, 1.96, baseY + 0.04);
-      }
-      addBench(feature, -2.15, 1.95, 0, baseY);
-    } else if (parkType === "cherry") {
-      addBox(feature, 3.8, 0.03, 0.72, stoneMat, 0, baseY + 0.015, 0, { cast: false });
-      addBox(feature, 0.72, 0.03, 2.5, stoneMat, 0, baseY + 0.016, 0.82, { cast: false });
-      for (const [x, z, scale] of [
-        [-1.9, -1.7, 0.8],
-        [1.85, -1.55, 0.72],
-        [-1.8, 1.75, 0.66],
-        [1.8, 1.72, 0.78],
-      ]) {
-        addTreeHere(x, z, scale, "cherry");
-      }
-      addParkLantern(feature, -0.9, 1.7, baseY);
-      addParkLantern(feature, 0.9, 1.7, baseY);
-      addBench(feature, 0.92, -0.4, -Math.PI / 2, baseY);
-      addBench(feature, -0.92, -0.4, Math.PI / 2, baseY);
-      addFlowers(feature, 1.9, 0.8, baseY);
-    } else if (parkType === "pond") {
-      addBox(feature, 4.9, 0.03, 0.52, pathMat, 0, baseY + 0.012, 2.02, { cast: false });
-      addPond(feature, -0.7, 0.95, baseY);
-      addGazebo(feature, 1.7, 1.62, baseY);
-      addBox(feature, 0.36, 0.05, 0.85, standard("#8b6547"), -0.7, baseY + 0.24, 0.95, {
-        cast: false,
-      });
-      addTreeHere(-2.05, -1.8, 0.65, "broadleaf");
-      addTreeHere(2.1, -1.7, 0.58, "palm");
-      addBench(feature, -1.8, 1.95, Math.PI, baseY);
-      addFlowers(feature, 1.5, 1.9, baseY);
-      addBush(feature, 2.15, 2.15, 0.7, baseY);
-    } else {
-      addBox(feature, 5.2, 0.03, 0.62, pathMat, 0, baseY + 0.012, 0, { cast: false });
-      addBox(feature, 0.62, 0.03, 5.2, pathMat, 0, baseY + 0.013, 0, { cast: false });
-      addParkFountain(feature, 0, 0, baseY);
-      addTreeHere(-2.15, -2.0, 0.7, "broadleaf");
-      addTreeHere(2.1, -1.9, 0.56, "cherry");
-      addTreeHere(-2.0, 2.0, 0.6, "conifer");
-      addTreeHere(2.05, 2.02, 0.62, "broadleaf");
-      addBench(feature, 1.0, 0.8, -Math.PI / 2, baseY);
-      addBench(feature, -1.0, -0.8, Math.PI / 2, baseY);
-      addBush(feature, 2.2, 2.2, 0.72, baseY);
-      addFlowers(feature, -1.8, 1.8, baseY);
-    }
-
-    addStreetLamp(blockX + 2.1, blockZ + 2.2, baseY, 0.72);
-    addStreetLamp(blockX - 2.1, blockZ - 2.2, baseY, 0.72);
-
-    const record = {
-      id: `${label}-park`,
-      name: parkDef?.name ?? "街角公园",
-      kind: "park",
-      family: "park",
-      label,
-      floors: 0,
-      detailLabel: "公园类型",
-      detailValue: parkDef?.en ?? "PARK",
-      height: Math.round((baseY + 1.1) * 3.2 * 10) / 10,
-      population: 0,
-      jobs: Math.round(rand(rng, 10, 24)),
-      occupancy: Math.round(rand(rng, 0.72, 0.98) * 100),
-      year: 2034 + Math.floor(rng() * 14),
-      color: parkDef?.model.ground ?? "#7c9d59",
-      note: parkDef?.description ?? "附近居民常来散步的小公园。",
-      address: `BLOCK ${label} · 中央绿轴`,
-      root: feature,
-      typeId: parkDef?.id,
-      typeLabel: parkDef ? `${parkDef.en} / ${parkDef.name}` : "PARK / 公园",
-      description: parkDef?.description,
-    };
-    addBuildingInfo(feature, record);
-    return record;
-  }
-
-  function addDistrictDetails(blockGroup, blockX, blockZ, district) {
-    const speciesByDistrict = {
-      residential: "broadleaf",
-      oldtown: "cherry",
-      commercial: "broadleaf",
-      downtown: "palm",
-      civic: "broadleaf",
-      academic: "conifer",
-      industrial: "conifer",
-      harbor: "palm",
-      creative: "cherry",
-      green: "broadleaf",
-      amusement: "palm",
-    };
-    const species = speciesByDistrict[district.id] ?? "broadleaf";
-    const treePositions = [
-      [-2.76, -2.48],
-      [2.76, 2.44],
-      [2.64, -2.55],
-      [-2.55, 2.64],
-      [-2.76, 0.42],
-      [2.72, -0.34],
-    ];
-    const usedTrees = new Set();
-    for (let index = 0; index < 3; index += 1) {
-      let positionIndex = Math.floor(rng() * treePositions.length);
-      while (usedTrees.has(positionIndex)) {
-        positionIndex = (positionIndex + 1) % treePositions.length;
-      }
-      usedTrees.add(positionIndex);
-      const [x, z] = treePositions[positionIndex];
-      addTree(blockGroup, x, z, rand(rng, 0.38, 0.58), BLOCK_TOP, species);
-    }
-
-    const propPositions = [
-      [-2.55, 2.55],
-      [2.55, 2.55],
-      [-2.55, -2.55],
-    ];
-    const [px, pz] = propPositions[Math.floor(rng() * propPositions.length)];
-    if (district.id === "residential" || district.id === "academic") {
-      if (rng() < 0.5) addBusShelter(blockGroup, px, pz, -Math.PI / 2, BLOCK_TOP);
-      else addBikeRack(blockGroup, px, pz, 0, BLOCK_TOP);
-      addBench(blockGroup, -px, pz, rng() < 0.5 ? 0 : Math.PI, BLOCK_TOP);
-    } else if (district.id === "oldtown") {
-      addPostbox(blockGroup, px, pz, 0, BLOCK_TOP);
-      if (rng() < 0.6) addNewsKiosk(blockGroup, -px, pz, 0, BLOCK_TOP);
-    } else if (district.id === "commercial" || district.id === "creative") {
-      if (rng() < 0.5) addBillboard(blockGroup, px, pz, 0, BLOCK_TOP);
-      else addNewsKiosk(blockGroup, px, pz, 0, BLOCK_TOP);
-      addPlanter(blockGroup, -px, -pz, 0, BLOCK_TOP);
-      addBikeRack(blockGroup, px, -pz, 0, BLOCK_TOP);
-    } else if (district.id === "civic") {
-      addStatue(blockGroup, 0.95, 2.0, Math.PI * 0.15, BLOCK_TOP);
-      addPlanter(blockGroup, -2.1, 2.2, 0, BLOCK_TOP);
-      addBench(blockGroup, 2.2, 1.5, Math.PI, BLOCK_TOP);
-    } else if (district.id === "industrial" || district.id === "harbor") {
-      addCrateStack(blockGroup, px, pz, 0, BLOCK_TOP);
-      addCrateStack(blockGroup, -px * 0.78, pz * 0.9, 0.4, BLOCK_TOP);
-      if (rng() < 0.6) addTrashBin(blockGroup, -px, pz, 0, BLOCK_TOP);
-    } else if (district.id === "downtown") {
-      addPlanter(blockGroup, px, pz, 0, BLOCK_TOP);
-      addBench(blockGroup, -px * 0.9, pz * 0.9, Math.PI, BLOCK_TOP);
-      addNewsKiosk(blockGroup, px * 0.9, -pz * 0.9, -Math.PI / 2, BLOCK_TOP);
-    } else if (district.id === "amusement") {
-      addPlanter(blockGroup, px, pz, 0, BLOCK_TOP);
-    }
-    addPlanter(blockGroup, -2.5, -2.5, 0, BLOCK_TOP);
-    if (district.id === "residential" || district.id === "creative") {
-      addFlowers(blockGroup, 2.0, -2.2, BLOCK_TOP);
-    }
-  }
-
-  function addDistrictBuildings(blockGroup, blockX, blockZ, label, district) {
-    const lots = DISTRICT_LOTS[district.id] ?? [];
-    lots.forEach((lot, index) => {
-      if (!lot.role && rng() < 0.06) return;
-      const def = pickBuildingDef(district, lot, lot.role);
-      if (!def) return;
-      addCatalogBuilding({
-        blockGroup,
-        blockX,
-        blockZ,
-        localX: lot.x + rand(rng, -0.03, 0.03),
-        localZ: lot.z + rand(rng, -0.03, 0.03),
-        lot,
-        def,
-        label,
-        district,
-        role: lot.role,
-      });
-      if (district.id === "residential" && index === 3) {
-        addFlowers(blockGroup, lot.x + 0.7, lot.z + 0.75, BLOCK_TOP);
-      }
-    });
-  }
-
   function addConstructionBlock(blockGroup, blockX, blockZ, label, district) {
     const feature = new THREE.Group();
     feature.position.y = BLOCK_TOP;
@@ -3520,94 +4294,538 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     return record;
   }
 
-  function addBlocks() {
-    const layout = transformDistrictLayout(
-      CITY_ZONE_LAYOUT,
-      Math.floor(rng() * 4),
-      rng() < 0.5
+  function districtFor(block) {
+    const asset = DISTRICTS_BY_ID.get(`d-${block.district}`);
+    if (asset) return { ...asset, id: block.district };
+    return AMUSEMENT_DISTRICT;
+  }
+
+  function addBlockGround(blockGroup, block, district) {
+    const width = block.w;
+    const depth = block.d;
+    addBox(blockGroup, width, 0.3, depth, sidewalkMat, 0, 0.15, 0, { cast: false });
+    const groundColor = DISTRICT_GROUND[district.id] ?? "#cbbf9f";
+    const groundMaterial = standard(groundColor, { roughness: 1 });
+    addBox(blockGroup, width - 0.52, 0.09, depth - 0.52, groundMaterial, 0, 0.345, 0, {
+      cast: false,
+    });
+    const curbX = width / 2 - 0.02;
+    const curbZ = depth / 2 - 0.02;
+    addBox(blockGroup, width + 0.04, 0.09, 0.07, curbMat, 0, 0.36, -curbZ, { cast: false });
+    addBox(blockGroup, width + 0.04, 0.09, 0.07, curbMat, 0, 0.36, curbZ, { cast: false });
+    addBox(blockGroup, 0.07, 0.09, depth + 0.04, curbMat, -curbX, 0.36, 0, { cast: false });
+    addBox(blockGroup, 0.07, 0.09, depth + 0.04, curbMat, curbX, 0.36, 0, { cast: false });
+    if (district.id === "green" || district.id === "amusement") return;
+    const pavingMat = standard(
+      district.id === "industrial" || district.id === "harbor" ? "#a5a79c" : "#c3b28f",
+      { roughness: 1 }
     );
-    const parkDeck = [...PARKS];
-    for (let index = parkDeck.length - 1; index > 0; index -= 1) {
-      const swap = Math.floor(rng() * (index + 1));
-      [parkDeck[index], parkDeck[swap]] = [parkDeck[swap], parkDeck[index]];
+    const inset = 0.34;
+    addBox(blockGroup, width - inset * 2, 0.024, 0.12, pavingMat, 0, BLOCK_TOP + 0.008, -depth / 2 + inset, {
+      cast: false,
+    });
+    addBox(blockGroup, width - inset * 2, 0.024, 0.12, pavingMat, 0, BLOCK_TOP + 0.008, depth / 2 - inset, {
+      cast: false,
+    });
+    addBox(blockGroup, 0.12, 0.024, depth - inset * 2, pavingMat, -width / 2 + inset, BLOCK_TOP + 0.009, 0, {
+      cast: false,
+    });
+    addBox(blockGroup, 0.12, 0.024, depth - inset * 2, pavingMat, width / 2 - inset, BLOCK_TOP + 0.009, 0, {
+      cast: false,
+    });
+    const accent = standard(district.model?.accent ?? "#ffd166", { roughness: 0.8 });
+    addBox(blockGroup, 0.62, 0.02, 0.18, accent, width / 2 - 0.85, BLOCK_TOP + 0.012, depth / 2 - 0.6, {
+      cast: false,
+    });
+  }
+
+  function planBlockLots(block) {
+    const lots = [];
+    const margin = block.morph === "tower" ? 0.36 : 0.42;
+    const uw = block.w - margin * 2;
+    const ud = block.d - margin * 2;
+    if (uw < 0.8 || ud < 0.8) return lots;
+    const add = (x, z, w, d, rotation = 0, role = null) => {
+      if (w < 0.55 || d < 0.55) return;
+      lots.push({ x, z, w, d, rotation, role });
+    };
+    const rowDepth = Math.min(clamp(Math.min(1.45, ud * 0.46), 0.95, 1.45), ud - 0.14);
+    const rowGap = 0.08;
+    const target =
+      block.district === "oldtown" || block.district === "creative"
+        ? 1.08
+        : block.district === "residential"
+          ? 1.38
+          : 1.68;
+    const addRow = (side, frontageTarget, depth, role = null) => {
+      const span = uw;
+      const count = Math.max(1, Math.round(span / frontageTarget));
+      const frontage = (span - rowGap * (count - 1)) / count;
+      if (frontage < 0.62) return;
+      for (let index = 0; index < count; index += 1) {
+        const x = -span / 2 + frontage / 2 + index * (frontage + rowGap);
+        const z = side === "s" ? ud / 2 - depth / 2 : -ud / 2 + depth / 2;
+        add(x, z, frontage, depth, side === "s" ? 0 : Math.PI, role);
+      }
+    };
+
+    const specialSizes = {
+      clocktower: { w: 1.15, d: 1.15 },
+      market: { w: 2.1, d: 1.85 },
+      department: { w: 2.0, d: 1.85 },
+      school: { w: 2.3, d: 1.9 },
+      energy: { w: 2.3, d: 2.1 },
+      warehouse: { w: 2.3, d: 2.0 },
+      "harbor-office": { w: 1.9, d: 1.7 },
+    };
+    const specialRole = block.role && specialSizes[block.role] ? block.role : null;
+    const special = specialRole ? specialSizes[specialRole] : null;
+
+    if (block.morph === "tower") {
+      const towerW = Math.min(uw, 3.3);
+      const towerD = Math.min(ud, 3.0);
+      const role =
+        block.role === "skyscraper" || block.role === "landmark" ? block.role : null;
+      add(0, 0, towerW, towerD, 0, role);
+      if (block.role !== "landmark" && uw > 2.4 && ud > 2.4) {
+        const podium = Math.min(1.35, uw * 0.34);
+        add(-uw / 2 + podium / 2, ud / 2 - podium / 2, podium, podium, 0, "podium");
+      }
+      return lots;
     }
-    let parkIndex = 0;
 
-    for (let i = 0; i < GRID_SIZE; i += 1) {
-      for (let j = 0; j < GRID_SIZE; j += 1) {
-        const districtId = layout[i][j];
-        const districtAsset = DISTRICTS_BY_ID.get(`d-${districtId}`);
-        const district = districtAsset
-          ? { ...districtAsset, id: districtId }
-          : AMUSEMENT_DISTRICT;
-        const blockX = BLOCK_CENTERS[i];
-        const blockZ = BLOCK_CENTERS[j];
-        const label = blockLabel(i, j);
-        const blockGroup = new THREE.Group();
-        blockGroup.position.set(blockX, 0, blockZ);
-        group.add(blockGroup);
+    if (block.morph === "campus") {
+      const bw = Math.min(uw * 0.62, 2.4);
+      const bd = Math.min(ud * 0.5, 2.0);
+      add(-uw * 0.2, -ud * 0.24, bw, bd, 0, specialRole);
+      add(uw * 0.2, ud * 0.2, Math.min(uw * 0.5, 2.0), Math.min(ud * 0.36, 1.7), Math.PI, null);
+      add(uw * 0.26, -ud * 0.22, Math.min(uw * 0.34, 1.4), Math.min(ud * 0.3, 1.2), Math.PI / 2, null);
+      return lots;
+    }
 
-        addBox(blockGroup, 6, 0.3, 6, sidewalkMat, 0, 0.15, 0, { cast: false });
-        const groundMaterial = standard(DISTRICT_GROUND[districtId] ?? "#cbbf9f", {
-          roughness: 1,
-        });
-        addBox(blockGroup, 5.45, 0.09, 5.45, groundMaterial, 0, 0.345, 0, {
+    if (block.morph === "warehouse") {
+      if (special) {
+        if (specialRole === "energy" || specialRole === "harbor-office") {
+          add(0, 0, Math.min(special.w, uw), Math.min(special.d, ud), 0, specialRole);
+          return lots;
+        }
+        const count = Math.max(1, Math.round(uw / 2.7));
+        const gap = 0.16;
+        const width = (uw - gap * (count - 1)) / count;
+        for (let index = 0; index < count; index += 1) {
+          const x = -uw / 2 + width / 2 + index * (width + gap);
+          add(x, 0, width, Math.min(special.d, ud), 0, specialRole);
+        }
+        return lots;
+      }
+      const count = Math.max(1, Math.round(uw / 2.8));
+      const gap = 0.18;
+      const width = (uw - gap * (count - 1)) / count;
+      for (let index = 0; index < count; index += 1) {
+        const x = -uw / 2 + width / 2 + index * (width + gap);
+        add(x, 0, width, Math.min(2.0, ud), 0, null);
+      }
+      return lots;
+    }
+
+    if (block.morph === "row" || block.morph === "cottage") {
+      if (special) {
+        add(0, 0, Math.min(special.w, uw), Math.min(special.d, ud), 0, specialRole);
+        return lots;
+      }
+      const cottage = block.morph === "cottage";
+      const depth = Math.min(
+        ud - 0.12,
+        Math.max(0.95, Math.min(cottage ? 1.3 : 1.2, ud * 0.62))
+      );
+      const frontage = cottage ? 2.3 : target;
+      addRow("s", frontage, depth);
+      if (ud > depth * 2 + 0.14) addRow("n", frontage, depth);
+      return lots;
+    }
+
+    if (special) {
+      const specialWidth = Math.min(special.w, uw);
+      const specialDepth = Math.min(special.d, ud);
+      add(0, 0, specialWidth, specialDepth, 0, specialRole);
+      const sideSpace = uw - specialWidth;
+      if (sideSpace > 1.6) {
+        const sideWidth = (sideSpace - 0.18) / 2;
+        add(-specialWidth / 2 - 0.09 - sideWidth / 2, 0, sideWidth, specialDepth, 0, null);
+        add(specialWidth / 2 + 0.09 + sideWidth / 2, 0, sideWidth, specialDepth, 0, null);
+      }
+      return lots;
+    }
+
+    addRow("s", target, rowDepth);
+    if (ud > rowDepth * 2 + 0.12) addRow("n", target, rowDepth);
+    if (uw > 2.4 && ud > 2.2 && rng() < 0.5) {
+      const sideLot = Math.min(1.45, rowDepth);
+      const side = rng() < 0.5 ? -1 : 1;
+      add(
+        side * (uw / 2 - sideLot / 2),
+        rand(rng, -ud * 0.12, ud * 0.12),
+        sideLot,
+        sideLot,
+        side > 0 ? Math.PI / 2 : -Math.PI / 2,
+        null
+      );
+    }
+    return lots;
+  }
+
+  function fillPlanBlock(blockGroup, block, district) {
+    const lots = planBlockLots(block);
+    for (const lot of lots) {
+      const def = pickBuildingDef(district, lot, lot.role);
+      if (!def) continue;
+      addCatalogBuilding({
+        blockGroup,
+        blockX: block.x,
+        blockZ: block.z,
+        localX: lot.x,
+        localZ: lot.z,
+        lot,
+        def,
+        label: block.label,
+        district,
+        role: lot.role,
+        density: block.density,
+        rotation: lot.rotation,
+        blockAngle: block.angle ?? 0,
+      });
+    }
+  }
+
+  function addCivicQuarter(blockGroup, block, district) {
+    const label = block.label;
+    const place = (id, x, z, w, d, role = "civic") => {
+      const def = BUILDINGS_BY_ID.get(id);
+      if (!def) return;
+      addCatalogBuilding({
+        blockGroup,
+        blockX: block.x,
+        blockZ: block.z,
+        localX: x,
+        localZ: z,
+        lot: { w, d },
+        def,
+        label,
+        district,
+        role,
+        density: 1.1,
+        blockAngle: block.angle ?? 0,
+      });
+    };
+    const halfW = block.w / 2 - 0.7;
+    const halfD = block.d / 2 - 0.7;
+    place("b-cityhall", 0, -halfD * 0.62, Math.min(4.4, halfW * 1.8), 1.9, "civic");
+    place("b-museum", -halfW * 0.5, -halfD * 0.02, 2.1, 1.9, "civic");
+    place("b-library", halfW * 0.52, -halfD * 0.02, 2.0, 1.85, "civic");
+
+    addBox(blockGroup, block.w - 1.2, 0.03, 3.1, stoneMat, 0, BLOCK_TOP + 0.015, halfD * 0.66, {
+      cast: false,
+    });
+    addParkFountain(blockGroup, 0, halfD * 0.72, BLOCK_TOP + 0.02);
+    addStatue(blockGroup, -halfW * 0.68, halfD * 0.6, Math.PI * 0.15, BLOCK_TOP);
+    addBench(blockGroup, halfW * 0.6, halfD * 0.44, Math.PI, BLOCK_TOP);
+    addBench(blockGroup, -halfW * 0.6, halfD * 0.42, Math.PI, BLOCK_TOP);
+    for (const [x, z, scale] of [
+      [-halfW * 0.9, halfD * 0.92, 0.62],
+      [halfW * 0.92, halfD * 0.9, 0.58],
+      [-halfW * 0.95, -halfD * 0.86, 0.54],
+      [halfW * 0.95, -halfD * 0.84, 0.5],
+    ]) {
+      addTree(blockGroup, x, z, scale, BLOCK_TOP, "cherry");
+    }
+    addFlowers(blockGroup, halfW * 0.2, halfD * 0.42, BLOCK_TOP);
+  }
+
+  function addGreenPlanBlock(blockGroup, block, district, parkIndex) {
+    const label = block.label;
+    const parkKind = block.parkKind ?? "pocket";
+    const halfW = block.w / 2 - 0.55;
+    const halfD = block.d / 2 - 0.55;
+    const feature = new THREE.Group();
+    blockGroup.add(feature);
+    const baseY = BLOCK_TOP;
+
+    const pathWidth = 0.5;
+    addBox(feature, pathWidth, 0.03, halfD * 2, pathMat, 0, baseY + 0.012, 0, { cast: false });
+    addBox(feature, halfW * 2, 0.03, pathWidth, pathMat, 0, baseY + 0.013, 0, { cast: false });
+
+    if (parkKind === "pond") {
+      addPond(feature, 0, -halfD * 0.45, baseY);
+      addGazebo(feature, halfW * 0.45, halfD * 0.55, baseY);
+      addBox(feature, 0.34, 0.05, halfD * 0.8, standard("#8b6547"), -halfW * 0.55, baseY + 0.02, 0, {
+        cast: false,
+      });
+    } else if (parkKind === "cherry") {
+      for (const [x, z, scale] of [
+        [-halfW * 0.68, -halfD * 0.55, 0.78],
+        [halfW * 0.64, -halfD * 0.3, 0.68],
+        [-halfW * 0.6, halfD * 0.45, 0.6],
+        [halfW * 0.6, halfD * 0.68, 0.66],
+      ]) {
+        addTree(feature, x, z, scale, baseY, "cherry");
+      }
+      addBench(feature, 0.8, -halfD * 0.1, -Math.PI / 2, baseY);
+      addBench(feature, -0.8, halfD * 0.2, Math.PI / 2, baseY);
+      addFlowers(feature, halfW * 0.2, halfD * 0.5, baseY);
+    } else if (parkKind === "sports") {
+      addSportsCourt(feature, 0, 0, Math.PI / 2, baseY);
+      addBench(feature, halfW * 0.7, -halfD * 0.4, Math.PI, baseY);
+      addTree(feature, -halfW * 0.78, -halfD * 0.72, 0.58, baseY, "conifer");
+      addTree(feature, halfW * 0.78, halfD * 0.72, 0.55, baseY, "broadleaf");
+    } else if (parkKind === "playground") {
+      addPlayground(feature, 0, 0, baseY);
+      addBench(feature, -halfW * 0.7, halfD * 0.5, 0, baseY);
+      addBench(feature, halfW * 0.72, -halfD * 0.5, Math.PI, baseY);
+      addTree(feature, -halfW * 0.8, -halfD * 0.72, 0.56, baseY, "broadleaf");
+    } else if (parkKind === "waterfront") {
+      addBox(feature, halfW * 2, 0.02, 0.9, stoneMat, 0, baseY + 0.015, halfD * 0.72, {
+        cast: false,
+      });
+      for (const [x, z, rotation] of [
+        [-halfW * 0.5, halfD * 0.52, Math.PI],
+        [halfW * 0.45, halfD * 0.52, Math.PI],
+      ]) {
+        addBench(feature, x, z, rotation, baseY);
+      }
+      addTree(feature, -halfW * 0.65, -halfD * 0.6, 0.72, baseY, "palm");
+      addTree(feature, halfW * 0.55, -halfD * 0.45, 0.6, baseY, "palm");
+      addGazebo(feature, 0, -halfD * 0.25, baseY);
+      addFlowers(feature, halfW * 0.2, halfD * 0.25, baseY);
+    } else {
+      addParkFountain(feature, 0, 0, baseY);
+      addTree(feature, -halfW * 0.7, -halfD * 0.6, 0.62, baseY, "broadleaf");
+      addTree(feature, halfW * 0.7, -halfD * 0.55, 0.58, baseY, "cherry");
+      addBench(feature, 0.95, 0.65, -Math.PI / 2, baseY);
+      addBench(feature, -0.95, -0.65, Math.PI / 2, baseY);
+      addFlowers(feature, halfW * 0.55, halfD * 0.45, baseY);
+    }
+
+    for (const [x, z] of [
+      [-halfW * 0.88, halfD * 0.9],
+      [halfW * 0.88, -halfD * 0.9],
+    ]) {
+      addTree(feature, x, z, 0.46, baseY, parkKind === "waterfront" ? "palm" : "broadleaf");
+    }
+    addStreetLamp(block.x + halfW, block.z + halfD, baseY, 0.66);
+    addStreetLamp(block.x - halfW, block.z - halfD, baseY, 0.66);
+
+    const parkAsset = PARKS[parkIndex % PARKS.length] ?? PARKS[0];
+    const record = {
+      id: `${label}-park`,
+      name: parkAsset?.name ?? "街角公园",
+      kind: "park",
+      family: "park",
+      label,
+      floors: 0,
+      detailLabel: "公园类型",
+      detailValue: parkAsset?.en ?? "PARK",
+      height: Math.round((baseY + 1.1) * 3.2 * 10) / 10,
+      population: 0,
+      jobs: Math.round(rand(rng, 10, 24)),
+      occupancy: Math.round(rand(rng, 0.72, 0.98) * 100),
+      year: 2034 + Math.floor(rng() * 14),
+      color: "#7c9d59",
+      note: parkAsset?.description ?? "附近居民常来散步的小公园。",
+      address: `BLOCK ${label} · ${district.name}`,
+      root: feature,
+      typeId: parkAsset?.id,
+      typeLabel: parkAsset ? `${parkAsset.en} / ${parkAsset.name}` : "PARK / 公园",
+      description: parkAsset?.description,
+      districtId: district.id,
+      districtName: district.name,
+    };
+    addBuildingInfo(feature, record);
+    return record;
+  }
+
+  function addStationBlock(blockGroup, block, district) {
+    const platformMat = standard("#9e9788");
+    const roofMat = standard("#c9c2b0");
+    const halfW = block.w / 2 - 0.6;
+    const halfD = block.d / 2 - 0.6;
+    addBox(blockGroup, halfW * 2, 0.08, 1.0, platformMat, 0, BLOCK_TOP + 0.04, -halfD * 0.62, {
+      cast: false,
+    });
+    addBox(blockGroup, halfW * 2, 0.06, 0.9, steelDarkMat, 0, BLOCK_TOP + 0.03, halfD * 0.66, {
+      cast: false,
+    });
+    const stationW = Math.min(3.2, halfW * 1.6);
+    addBox(blockGroup, stationW, 0.8, 1.5, roofMat, 0, BLOCK_TOP + 0.4, -halfD * 0.05);
+    addBox(blockGroup, stationW * 0.86, 0.55, 0.05, glassMat, 0, BLOCK_TOP + 0.42, -halfD * 0.05 + 0.78, {
+      cast: false,
+    });
+    addBox(blockGroup, stationW + 0.4, 0.08, 1.1, roofMat, 0, BLOCK_TOP + 0.86, halfD * 0.25);
+    for (const side of [-1, 1]) {
+      addBox(blockGroup, 0.06, 0.8, 0.06, steelDarkMat, side * stationW * 0.38, BLOCK_TOP + 0.45, halfD * 0.25);
+    }
+    addSignPanel(blockGroup, "#e7c36a", 1.2, 0.26, 0, BLOCK_TOP + 0.98, halfD * 0.25);
+    addBench(blockGroup, -1.2, halfD * 0.25, 0, BLOCK_TOP + 0.02);
+    addBench(blockGroup, 1.2, halfD * 0.25, 0, BLOCK_TOP + 0.02);
+
+    const record = {
+      id: `${block.label}-station`,
+      name: "像素湾站",
+      kind: "civic",
+      family: "civic",
+      label: block.label,
+      floors: 1,
+      height: Math.round(4.2 * 3.2 * 10) / 10,
+      population: 0,
+      jobs: 38,
+      occupancy: 92,
+      year: 2039,
+      color: "#c9c2b0",
+      note: "北岸铁路在这里拐进城市，月台上总有赶早班车的人。",
+      address: `BLOCK ${block.label} · ${district.name}`,
+      root: blockGroup,
+      typeLabel: "RAIL STATION / 火车站",
+      districtId: district.id,
+      districtName: district.name,
+    };
+    addBuildingInfo(blockGroup, record);
+  }
+
+  function addBlockDetails(blockGroup, block, district) {
+    const speciesByDistrict = {
+      residential: "broadleaf",
+      oldtown: "cherry",
+      commercial: "broadleaf",
+      downtown: "palm",
+      civic: "broadleaf",
+      academic: "conifer",
+      industrial: "conifer",
+      harbor: "palm",
+      creative: "cherry",
+      green: "broadleaf",
+      amusement: "palm",
+    };
+    if (district.id === "green" || district.id === "amusement") return;
+    const species = speciesByDistrict[district.id] ?? "broadleaf";
+    const halfW = block.w / 2;
+    const halfD = block.d / 2;
+    if (["perimeter", "row", "cottage", "adaptive"].includes(block.morph)) {
+      const gardenW = block.w - 2.0;
+      const gardenD = block.d - (block.morph === "row" ? 1.85 : 2.35);
+      if (gardenW > 0.7 && gardenD > 0.5) {
+        addBox(blockGroup, gardenW, 0.02, gardenD, grassDarkMat, 0, BLOCK_TOP + 0.016, 0, {
           cast: false,
         });
-        addBox(blockGroup, 6.02, 0.09, 0.06, curbMat, 0, 0.36, -2.98, { cast: false });
-        addBox(blockGroup, 6.02, 0.09, 0.06, curbMat, 0, 0.36, 2.98, { cast: false });
-        addBox(blockGroup, 0.06, 0.09, 6.02, curbMat, -2.98, 0.36, 0, { cast: false });
-        addBox(blockGroup, 0.06, 0.09, 6.02, curbMat, 2.98, 0.36, 0, { cast: false });
-        if (districtId !== "green" && districtId !== "amusement") {
-          const pavingMat = standard(
-            districtId === "industrial" || districtId === "harbor" ? "#a5a79c" : "#c3b28f",
-            { roughness: 1 }
-          );
-          addBox(blockGroup, 5.24, 0.024, 0.14, pavingMat, 0, BLOCK_TOP + 0.008, -2.5, {
-            cast: false,
-          });
-          addBox(blockGroup, 5.24, 0.024, 0.14, pavingMat, 0, BLOCK_TOP + 0.008, 2.5, {
-            cast: false,
-          });
-          addBox(blockGroup, 0.14, 0.024, 5.24, pavingMat, -2.5, BLOCK_TOP + 0.009, 0, {
-            cast: false,
-          });
-          addBox(blockGroup, 0.14, 0.024, 5.24, pavingMat, 2.5, BLOCK_TOP + 0.009, 0, {
-            cast: false,
-          });
-          const accent = standard(district.model?.accent ?? "#ffd166", {
-            roughness: 0.8,
-          });
-          addBox(blockGroup, 0.72, 0.02, 0.2, accent, 2.1, BLOCK_TOP + 0.012, 2.28, {
-            cast: false,
-          });
-        }
-
-        if (districtId === "green") {
-          const parkDef = parkDeck[parkIndex % parkDeck.length] ?? PARKS[0];
-          parkIndex += 1;
-          addCatalogParkBlock(blockGroup, blockX, blockZ, label, parkDef);
-        } else if (districtId === "amusement") {
-          addAmusementBlock(blockGroup, blockX, blockZ, label);
-        } else if (districtId === "construction") {
-          addConstructionBlock(blockGroup, blockX, blockZ, label, district);
-        } else {
-          addDistrictBuildings(blockGroup, blockX, blockZ, label, district);
-          addDistrictDetails(blockGroup, blockX, blockZ, district);
-        }
-
-        blocks.push({
-          i,
-          j,
-          blockX,
-          blockZ,
-          type: districtId,
-          label,
-          group: blockGroup,
-          district,
-          districtName: district.name,
-        });
+        addTree(
+          blockGroup,
+          rand(rng, -gardenW * 0.22, gardenW * 0.22),
+          rand(rng, -gardenD * 0.18, gardenD * 0.18),
+          0.38,
+          BLOCK_TOP + 0.02,
+          species
+        );
+        addBench(blockGroup, gardenW * 0.25, 0, Math.PI / 2, BLOCK_TOP + 0.02);
       }
+    }
+    if (block.w > 2.2 && block.d > 2.2) {
+      addTree(blockGroup, -halfW + 0.32, -halfD + 0.32, rand(rng, 0.38, 0.55), BLOCK_TOP, species);
+      if (rng() < 0.6) {
+        addTree(blockGroup, halfW - 0.3, halfD - 0.3, rand(rng, 0.34, 0.5), BLOCK_TOP, species);
+      }
+    }
+    if (district.id === "residential" || district.id === "academic") {
+      if (rng() < 0.48) addBusShelter(blockGroup, -halfW + 0.5, halfD - 0.25, -Math.PI / 2, BLOCK_TOP);
+      else addBikeRack(blockGroup, -halfW + 0.4, halfD - 0.3, 0, BLOCK_TOP);
+      addBench(blockGroup, halfW - 0.55, halfD - 0.3, Math.PI, BLOCK_TOP);
+    } else if (district.id === "oldtown") {
+      addPostbox(blockGroup, halfW - 0.35, -halfD + 0.45, 0, BLOCK_TOP);
+      if (rng() < 0.55) addNewsKiosk(blockGroup, -halfW + 0.45, halfD - 0.5, 0, BLOCK_TOP);
+      addFlowers(blockGroup, halfW - 0.5, halfD - 0.4, BLOCK_TOP);
+    } else if (district.id === "commercial" || district.id === "creative") {
+      if (rng() < 0.5) addBillboard(blockGroup, -halfW + 0.7, -halfD + 0.5, 0, BLOCK_TOP);
+      else addNewsKiosk(blockGroup, -halfW + 0.45, halfD - 0.5, 0, BLOCK_TOP);
+      addPlanter(blockGroup, halfW - 0.55, halfD - 0.35, 0, BLOCK_TOP);
+      addBikeRack(blockGroup, halfW - 0.5, -halfD + 0.4, 0, BLOCK_TOP);
+    } else if (district.id === "civic") {
+      addPlanter(blockGroup, -halfW + 0.55, -halfD + 0.5, 0, BLOCK_TOP);
+      addBench(blockGroup, halfW * 0.65, -halfD + 0.45, Math.PI, BLOCK_TOP);
+    } else if (district.id === "industrial" || district.id === "harbor") {
+      addCrateStack(blockGroup, -halfW + 0.55, halfD - 0.55, 0, BLOCK_TOP);
+      addCrateStack(blockGroup, halfW - 0.6, -halfD + 0.6, 0.4, BLOCK_TOP);
+      if (rng() < 0.5) addTrashBin(blockGroup, halfW - 0.4, halfD - 0.4, 0, BLOCK_TOP);
+    } else if (district.id === "downtown") {
+      addPlanter(blockGroup, -halfW + 0.5, halfD - 0.4, 0, BLOCK_TOP);
+      addBench(blockGroup, halfW - 0.5, halfD - 0.35, Math.PI, BLOCK_TOP);
+      addAwning(
+        blockGroup,
+        Math.min(1.5, block.w * 0.42),
+        0,
+        BLOCK_TOP + 0.52,
+        halfD - 0.22,
+        district.model?.accent ?? "#ffd166"
+      );
+      addBench(blockGroup, -halfW + 0.55, halfD - 0.3, 0, BLOCK_TOP);
+    }
+  }
+
+  function addPlanAmusement(blockGroup, block) {
+    const record = addAmusementBlock(blockGroup, block.x, block.z, block.label);
+    const feature = blockGroup.children[blockGroup.children.length - 1];
+    if (feature) feature.scale.setScalar(Math.min(block.w, block.d) / 6);
+    record.districtId = "amusement";
+    record.districtName = AMUSEMENT_DISTRICT.name;
+    return record;
+  }
+
+  function addPlanConstruction(blockGroup, block, district) {
+    const record = addConstructionBlock(blockGroup, block.x, block.z, block.label, district);
+    const feature = blockGroup.children[blockGroup.children.length - 1];
+    if (feature) {
+      const scale = Math.min(block.w, block.d) / 5.9;
+      feature.scale.set(scale, 1, scale);
+    }
+    return record;
+  }
+
+  function addBlocks() {
+    let parkIndex = 0;
+    for (const block of plan.blocks) {
+      const district = districtFor(block);
+      const blockGroup = new THREE.Group();
+      blockGroup.position.set(block.x, 0, block.z);
+      blockGroup.rotation.y = block.angle ?? 0;
+      group.add(blockGroup);
+
+      addBlockGround(blockGroup, block, district);
+
+      if (block.morph === "green") {
+        addGreenPlanBlock(blockGroup, block, district, parkIndex);
+        parkIndex += 1;
+      } else if (block.morph === "amusement") {
+        addPlanAmusement(blockGroup, block);
+      } else if (block.morph === "construction") {
+        addPlanConstruction(blockGroup, block, district);
+      } else if (block.morph === "civic") {
+        addCivicQuarter(blockGroup, block, district);
+      } else if (block.morph === "station") {
+        addStationBlock(blockGroup, block, district);
+      } else {
+        fillPlanBlock(blockGroup, block, district);
+        addBlockDetails(blockGroup, block, district);
+      }
+
+      blocks.push({
+        i: blocks.length,
+        j: 0,
+        blockX: block.x,
+        blockZ: block.z,
+        width: block.w,
+        depth: block.d,
+        type: district.id,
+        label: block.label,
+        group: blockGroup,
+        district,
+        districtName: district.name,
+      });
     }
   }
 
@@ -3782,14 +5000,26 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       return vehicle;
     };
 
-    const carCurves = blocks.map((block) => ({
-      block,
-      curve: makeLoopCurve(block.blockX, block.blockZ, 3.54, 0.62),
-    }));
+    const carBlocks = plan.blocks.filter(
+      (block) => block.morph !== "green" && block.morph !== "amusement"
+    );
 
     let carIndex = 0;
-    for (const { block, curve } of carCurves) {
-      const count = rng() < 0.56 ? 2 : 1;
+    for (const block of carBlocks) {
+      if (rng() < 0.36) continue;
+      const halfX = block.w / 2 + 0.48;
+      const halfZ = block.d / 2 + 0.48;
+      const radius = Math.min(0.55, Math.min(halfX, halfZ) * 0.36);
+      const curve = makeLoopCurve(
+        block.x,
+        block.z,
+        halfX,
+        radius,
+        ROAD_TOP + 0.018,
+        halfZ,
+        block.angle ?? 0
+      );
+      const count = rng() < 0.3 ? 2 : 1;
       for (let i = 0; i < count; i += 1) {
         const def =
           vehicleDeck.pop() ??
@@ -3819,7 +5049,18 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     }
   }
 
-  function addBoat(def, half, t, direction, speed, phase) {
+  function addBoat(
+    def,
+    half,
+    t,
+    direction,
+    speed,
+    phase,
+    centerX = 0,
+    centerZ = 0,
+    radius = 4.2,
+    halfZ = half
+  ) {
     const model = def.model;
     const boat = new THREE.Group();
     const hullMat = standard(model.color, { roughness: 0.72 });
@@ -3879,7 +5120,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       cast: false,
       receive: false,
     });
-    const curve = makeLoopCurve(0, 0, half, 4.2, WATER_LEVEL);
+    const curve = makeLoopCurve(centerX, centerZ, half, radius, WATER_LEVEL, halfZ);
     boat.position.copy(curve.getPointAt(t));
     boat.position.y = WATER_LEVEL + 0.02;
     const tangent = curve.getTangentAt(t);
@@ -3905,6 +5146,28 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     types.forEach((def, index) => {
       addBoat(def, halves[index], rng(), index % 2 === 0 ? 1 : -1, rand(rng, 0.4, 0.68), rng() * TAU);
     });
+
+    const ferry = types.find((def) => def.model.vessel === "ferry");
+    const dinghy = types.find((def) => def.model.vessel === "dinghy");
+    if (ferry) {
+      const loop = plan.bayLoop;
+      addBoat(ferry, loop.half, rng(), 1, 0.42, rng() * TAU, loop.x, loop.z, 1.8, loop.half);
+    }
+    if (dinghy) {
+      const loop = plan.bayLoop;
+      addBoat(
+        dinghy,
+        loop.half * 0.62,
+        rng(),
+        -1,
+        0.36,
+        rng() * TAU,
+        loop.x + 1.2,
+        loop.z - 1.0,
+        0.9,
+        loop.half * 0.62
+      );
+    }
 
     const buoyDef = MARITIME.find((asset) => asset.model.vessel === "buoy");
     if (buoyDef) {
@@ -3952,28 +5215,59 @@ export function createCity({ seed = randomCitySeed() } = {}) {
   }
 
   function addPointCluster() {
-    const promenade = PLATEAU_SIZE / 2 - 1.2;
-    addBusShelter(group, -promenade, -17.3, Math.PI / 2, 0.02);
-    addNewsKiosk(group, promenade, -15.4, -Math.PI / 2, 0.02);
-    addPostbox(group, -promenade, -10.1, Math.PI / 2, 0.02);
-    addTrashBin(group, promenade, 16.2, 0, 0.02);
-    addPlanter(group, -promenade, 15.4, 0, 0.02);
-    addBikeRack(group, -15.8, promenade, 0, 0.02);
-    addBillboard(group, 16.7, promenade - 0.2, 0, 0.02);
-    addCrateStack(group, promenade, 6.1, 0, 0.02);
-    addStatue(group, -9.8, -promenade, Math.PI, 0.02);
+    const promenadeZ = plan.quayRoads.north - 0.55;
+    const promenadeX = plan.quayRoads.west - 0.55;
 
-    const pierX = PLATEAU_SIZE / 2 + 2.35;
-    const pierZ = 7.5;
-    const wood = standard("#896a4c");
-    addBox(group, 4.9, 0.1, 1.0, wood, pierX - 0.9, -0.02, pierZ);
-    for (let index = 0; index < 6; index += 1) {
-      addBox(group, 0.09, 1.45, 0.09, standard("#6f553d"), pierX - 2.95 + index * 0.92, -0.72, pierZ - 0.42);
-      addBox(group, 0.09, 1.45, 0.09, standard("#6f553d"), pierX - 2.95 + index * 0.92, -0.72, pierZ + 0.42);
+    addNewsKiosk(group, 8.2, promenadeZ, 0, 0.03);
+    addBusShelter(group, 13.2, promenadeZ, 0, 0.03);
+    addPostbox(group, 18.0, promenadeZ, 0, 0.03);
+    addTrashBin(group, 10.6, promenadeZ, 0, 0.03);
+    addBikeRack(group, 20.4, promenadeZ, 0, 0.03);
+    addPlanter(group, 6.8, promenadeZ, 0, 0.03);
+    addStatue(group, promenadeX, 12.2, Math.PI / 2, 0.03);
+    addBillboard(group, promenadeX, 18.4, Math.PI / 2, 0.03);
+    addNewsKiosk(group, promenadeX, 8.0, Math.PI / 2, 0.03);
+    addBench(group, promenadeX, 15.6, Math.PI / 2, 0.03);
+    addCrateStack(group, 16.4, 9.4, 0, -0.36);
+    addCrateStack(group, 19.0, 12.4, 0.4, -0.36);
+
+    // A small monument square marks where the diagonal boulevard meets the bay.
+    const plazaX = 4.4;
+    const plazaZ = 4.2;
+    addRoundCylinder(group, 1.15, 0.04, stoneMat, plazaX, 0.065, plazaZ);
+    addRoundCylinder(group, 0.75, 0.03, plazaMat, plazaX, 0.085, plazaZ);
+    addBox(group, 0.62, 0.16, 0.62, trimMat, plazaX, 0.17, plazaZ);
+    addBox(group, 0.26, 1.5, 0.26, standard("#cfc4ab"), plazaX, 1.0, plazaZ);
+    addBox(group, 0.12, 0.32, 0.12, standard("#d7b768"), plazaX, 1.9, plazaZ);
+    for (let index = 0; index < 8; index += 1) {
+      const angle = (index / 8) * TAU;
+      addRoundCylinder(
+        group,
+        0.05,
+        0.18,
+        steelDarkMat,
+        plazaX + Math.cos(angle) * 1.0,
+        0.14,
+        plazaZ + Math.sin(angle) * 1.0
+      );
     }
-    addStreetLamp(pierX + 1.3, pierZ, -0.02, 0.82);
-    addBench(group, pierX + 0.35, pierZ - 0.27, Math.PI / 2, 0.01);
-    addBox(group, 0.3, 0.18, 0.28, standard("#8b6b4c"), pierX - 1.0, 0.08, pierZ + 0.24);
+    addBench(group, plazaX - 1.35, plazaZ + 0.4, Math.PI / 2, 0.03);
+    addBench(group, plazaX + 1.35, plazaZ - 0.4, -Math.PI / 2, 0.03);
+
+    const lightX = 20.4;
+    const lightZ = 8.9;
+    const lightBase = -0.4;
+    addRoundCylinder(group, 0.44, 0.26, stoneMat, lightX, lightBase + 0.13, lightZ);
+    addRoundCylinder(group, 0.31, 1.25, whiteMat, lightX, lightBase + 0.82, lightZ);
+    addRoundCylinder(group, 0.33, 0.2, standard("#d76a5a"), lightX, lightBase + 1.08, lightZ);
+    addRoundCylinder(group, 0.23, 0.28, glassMat, lightX, lightBase + 1.52, lightZ);
+    addPyramid(group, 0.4, 0.32, 0.4, standard("#d76a5a"), lightX, lightBase + 1.66, lightZ, Math.PI / 4);
+    const lighthouseLamp = addBox(group, 0.1, 0.1, 0.1, lampHeadMat, lightX, lightBase + 1.62, lightZ, {
+      cast: false,
+      receive: false,
+    });
+    beacons.push({ mesh: lighthouseLamp, phase: rng() * TAU });
+    addGlowPlane(group, lightX, lightBase + 1.66, lightZ, 1.2);
   }
 
   addIsland();
@@ -4030,6 +5324,12 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       );
     }
 
+    for (const train of trains) {
+      train.x += simDt * train.speed;
+      if (train.x > train.max) train.x = train.min;
+      train.group.position.x = train.x;
+    }
+
     for (const bird of birds) {
       bird.angle += ambientDt * bird.speed;
       const x = Math.cos(bird.angle) * bird.radius;
@@ -4075,6 +5375,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     const lights = env.lights;
     litWindowMaterial.emissiveIntensity = 0.015 + lights * 1.95;
     darkWindowMaterial.emissiveIntensity = 0.1 + lights * 0.35;
+    towerWindowMaterial.emissiveIntensity = 0.03 + lights * 1.7;
     lampHeadMat.emissiveIntensity = 0.04 + lights * 3.2;
     glowMaterial.opacity = lights * 0.7;
     headlightMat.emissiveIntensity = 0.12 + lights * 3.6;
@@ -4113,7 +5414,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       for (const value of Object.values(material)) {
         if (value && value.isTexture) value.dispose();
       }
-      material.dispose();
+      if (typeof material.dispose === "function") material.dispose();
     }
     for (const geometry of geometries) {
       geometry.dispose();

@@ -485,6 +485,12 @@ button:focus-visible {
   background: rgba(255, 209, 102, 0.1);
 }
 
+#miniatureBtn[aria-pressed="true"] {
+  border-color: rgba(255, 209, 102, 0.4);
+  background: rgba(255, 209, 102, 0.1);
+  color: var(--gold);
+}
+
 .ico {
   width: 15px;
   height: 15px;

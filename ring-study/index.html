@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a1020" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="像素湾 PIXEL BAY — 环形水城：一座运河环绕的圆形水城。"
+    />
+    <title>像素湾 PIXEL BAY · 环形水城 RING WATERWAYS</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2310192b'/%3E%3Crect x='6' y='17' width='5' height='9' fill='%2373c9bd'/%3E%3Crect x='13' y='9' width='6' height='17' fill='%23f6e8cb'/%3E%3Crect x='21' y='13' width='5' height='13' fill='%23e16f5b'/%3E%3Crect x='4' y='27' width='24' height='2' fill='%23ffd166'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="../src/style.css" />
+      <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene" aria-label="可旋转、缩放的像素风三维城市"></canvas>
+      <div class="screen-fx" aria-hidden="true"></div>
+
+      <header class="topbar">
+        <section class="brand panel" aria-label="像素湾城市观测站">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" fill="#10192b" />
+            <rect x="2" y="2" width="28" height="28" fill="none" stroke="#f6e8cb" stroke-width="1" opacity=".28" />
+            <rect x="22" y="6" width="5" height="5" fill="#ffd166" />
+            <rect x="23" y="7" width="3" height="3" fill="#f39a66" />
+            <rect x="5" y="16" width="5" height="11" fill="#73c9bd" />
+            <rect x="11" y="10" width="5" height="17" fill="#f6e8cb" />
+            <rect x="17" y="14" width="4" height="13" fill="#e16f5b" />
+            <rect x="12" y="13" width="1" height="1" fill="#10192b" />
+            <rect x="14" y="13" width="1" height="1" fill="#10192b" />
+            <rect x="12" y="17" width="1" height="1" fill="#10192b" />
+            <rect x="14" y="17" width="1" height="1" fill="#10192b" />
+            <rect x="6" y="19" width="1" height="1" fill="#10192b" />
+            <rect x="8" y="22" width="1" height="1" fill="#10192b" />
+            <rect x="18" y="17" width="2" height="1" fill="#10192b" />
+            <rect x="18" y="21" width="2" height="1" fill="#10192b" />
+            <rect x="2" y="28" width="28" height="2" fill="#0a1020" />
+          </svg>
+          <div class="brand-copy">
+            <p class="eyebrow">VOXEL CITY · RING WATERWAYS</p>
+            <h1>环形水城 <em>RING WATERWAYS</em></h1>
+          </div>
+        </section>
+
+        <div class="top-right">
+          <div class="live-line"><i class="live-dot"></i><span id="statusText">SIMULATION LIVE</span></div>
+          <section class="weather panel" aria-label="城市天气">
+            <div class="weather-icon" id="weatherIcon" aria-hidden="true">
+              <span class="sun"></span>
+            </div>
+            <div class="weather-copy">
+              <strong id="weatherLabel">晴 / CLEAR</strong>
+              <span><span id="weatherTemp">24°C</span> · 东南风 2级</span>
+            </div>
+            <div
+              class="weather-seed"
+              id="seedChip"
+              role="button"
+              tabindex="0"
+              aria-label="打开城市种子面板"
+            >
+              <span>SEED</span>
+              <b id="seedLabel">00000000</b>
+            </div>
+          </section>
+        </div>
+      </header>
+
+
+      <nav class="planning-tools panel" aria-label="规划展示"><button class="control-button plan-active" data-plan-view="city" aria-pressed="true">城市</button><button class="control-button" data-plan-view="district" aria-pressed="false">分区</button><button class="control-button" data-plan-view="network" aria-pressed="false">路网</button><span class="dock-divider"></span><a class="control-button" href="/" title="打开原来的像素湾城市">原版 ↗</a></nav>
+      <aside class="info-panel panel" id="infoPanel" aria-hidden="true">
+        <button class="icon-button close-button" id="closeInfoBtn" aria-label="关闭建筑档案">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
+        </button>
+        <p class="info-kicker"><i id="infoSwatch"></i><span id="infoType">RESIDENTIAL</span></p>
+        <h2 id="infoName">晨光公寓</h2>
+        <p class="info-address" id="infoAddress">BLOCK B-02 · 像素湾东区</p>
+        <div class="info-rule"></div>
+        <dl class="info-grid">
+          <div><dt>建筑高度</dt><dd id="infoHeight">12.5 m</dd></div>
+          <div><dt id="infoFloorsLabel">楼层</dt><dd id="infoFloors">4 F</dd></div>
+          <div><dt id="infoPopLabel">容纳人口</dt><dd id="infoPop">128 人</dd></div>
+          <div><dt>建成年份</dt><dd id="infoYear">2049</dd></div>
+        </dl>
+        <div class="meter-block">
+          <div class="meter-label"><span>入住率 / OCCUPANCY</span><b id="infoOccupancy">82%</b></div>
+          <div class="meter"><i id="infoMeter"></i></div>
+        </div>
+        <p class="info-note" id="infoNote">清晨的第一班巴士，从这里出发。</p>
+        <div class="info-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </aside>
+
+      <aside class="seed-panel panel" id="seedPanel" aria-hidden="true">
+        <button class="icon-button close-button" id="closeSeedBtn" aria-label="关闭种子面板">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" /></svg>
+        </button>
+        <p class="info-kicker"><i></i><span>SEED VAULT / 城市种子</span></p>
+        <h2>保存这座城</h2>
+        <p class="seed-copy">同一串种子会生成完全相同的城市。载入旧种子，或把链接分享给别人。</p>
+        <form class="seed-form" id="seedForm">
+          <input
+            id="seedInput"
+            name="seed"
+            type="text"
+            maxlength="10"
+            inputmode="text"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="输入城市种子（1 到 8 位十六进制）"
+            placeholder="A1B2C3D4"
+          />
+          <button type="submit">载入</button>
+        </form>
+        <div class="seed-actions">
+          <button type="button" id="copySeedBtn">复制种子</button>
+          <button type="button" id="copyLinkBtn">复制链接</button>
+        </div>
+        <p class="seed-status" id="seedStatus">当前 SEED · 00000000</p>
+        <div class="info-corners" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      </aside>
+
+      <footer class="bottom-ui">
+        <section class="time-card panel" aria-label="城市时间">
+          <div class="time-topline">
+            <span id="phaseLabel">DUSK / 黄昏</span>
+            <span id="dayLabel">DAY 042</span>
+          </div>
+          <div class="time-main">
+            <strong id="clockLabel">17:42</strong>
+            <span class="time-zone">UTC+8</span>
+          </div>
+          <div class="day-track" aria-hidden="true">
+            <span class="day-segment dawn"></span>
+            <span class="day-segment day"></span>
+            <span class="day-segment dusk"></span>
+            <span class="day-segment night"></span>
+            <i class="day-marker" id="dayMarker"></i>
+          </div>
+          <div class="stats-row">
+            <div><span>人口</span><strong id="statPop">0</strong></div>
+            <div><span>建筑</span><strong id="statBuildings">0</strong></div>
+            <div><span>车流</span><strong id="statCars">0</strong></div>
+            <div><span>区域</span><strong id="statDistricts">0</strong></div>
+          </div>
+        </section>
+
+        <nav class="control-dock panel" aria-label="模拟控制">
+          <button class="control-button wide" id="pauseBtn" aria-label="暂停模拟" aria-pressed="false" title="暂停 / 继续 (空格)">
+            <svg class="ico pause-ico" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="3" y="2" width="3" height="12" />
+              <rect x="10" y="2" width="3" height="12" />
+            </svg>
+            <svg class="ico play-ico" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 2l9 6-9 6z" />
+            </svg>
+            <span id="pauseLabel">暂停</span>
+          </button>
+          <span class="dock-divider" aria-hidden="true"></span>
+          <div class="speed-switch" role="group" aria-label="模拟速度">
+            <button data-speed="1" class="active" aria-label="正常速度" aria-pressed="true">1×</button>
+            <button data-speed="2" aria-label="双倍速度" aria-pressed="false">2×</button>
+            <button data-speed="4" aria-label="四倍速度" aria-pressed="false">4×</button>
+          </div>
+          <span class="dock-divider" aria-hidden="true"></span>
+          <button class="control-button" id="rebuildBtn" aria-label="重新生成城市" title="重新生成城市 (R)">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 2v3M8 11v3M2 8h3M11 8h3" />
+              <rect x="4" y="4" width="8" height="8" fill="none" />
+            </svg>
+            <span>新建</span>
+          </button>
+          <button
+            class="control-button"
+            id="seedBtn"
+            aria-label="城市种子与分享"
+            aria-expanded="false"
+            title="种子与分享"
+          >
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="5" cy="8" r="2.4" fill="none" />
+              <path d="M7.4 8H14M11 8v2.3M13 8v1.7" />
+            </svg>
+            <span>种子</span>
+          </button>
+          <button
+            class="control-button"
+            id="projectionBtn"
+            aria-label="切换为透视投影"
+            aria-pressed="false"
+            title="当前等轴，点击切换透视"
+          >
+            <svg class="ico ortho-ico" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 1.8 13.2 5v6L8 14.2 2.8 11V5z" fill="none" />
+              <path d="M2.8 5 8 8.2 13.2 5M8 8.2v6" fill="none" />
+            </svg>
+            <svg class="ico persp-ico" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M2.4 13.2 5.4 2.8h5.2l3 10.4z" fill="none" />
+              <path d="M8 2.8v10.4" fill="none" />
+            </svg>
+            <span id="projectionLabel">等轴</span>
+          </button>
+          <a
+            class="control-button catalog-link"
+            href="/catalog.html"
+            aria-label="打开城市物体图鉴"
+            title="物体图鉴"
+          >
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="2" y="2" width="5" height="5" fill="none" />
+              <rect x="9" y="2" width="5" height="5" fill="none" />
+              <rect x="2" y="9" width="5" height="5" fill="none" />
+              <rect x="9" y="9" width="5" height="5" fill="none" />
+            </svg>
+            <span>图鉴</span>
+          </a>
+          <button class="control-button" id="resetViewBtn" aria-label="复位摄像机视角" title="复位视角 (C)">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="5" fill="none" />
+              <path d="M8 1v3M8 12v3M1 8h3M12 8h3" />
+            </svg>
+            <span>视角</span>
+          </button>
+        </nav>
+
+        <p class="help-card">
+          <span>拖动旋转</span><span>滚轮缩放</span><span>点击建筑 / 设施查看档案</span><span>SEED 保存城市</span>
+        </p>
+      </footer>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+      <div class="boot" id="boot">
+        <svg class="boot-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="6" y="17" width="5" height="9" fill="#73c9bd" />
+          <rect x="13" y="9" width="6" height="17" fill="#f6e8cb" />
+          <rect x="21" y="13" width="5" height="13" fill="#e16f5b" />
+          <rect x="4" y="27" width="24" height="2" fill="#ffd166" />
+        </svg>
+        <div class="boot-copy"><span>正在铺设像素街道</span><b>PIXEL BAY</b></div>
+        <div class="boot-bar"><i></i></div>
+      </div>
+
+      <div class="error-overlay" id="errorOverlay" hidden>
+        <div class="panel">
+          <p class="eyebrow">SYSTEM FAILURE</p>
+          <h2>城市信号中断</h2>
+          <p id="errorMessage">渲染器初始化失败。</p>
+          <p class="error-hint">请确认浏览器已开启 WebGL，并尝试刷新页面。</p>
+        </div>
+      </div>
+
+      <noscript><div class="no-script">像素湾需要启用 JavaScript 才能运行。</div></noscript>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

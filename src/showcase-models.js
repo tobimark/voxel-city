@@ -3002,7 +3002,7 @@ function buildMaritime(asset, kit, rng) {
     kit.box(group, 0.18, 0.025, 0.025, kit.darkMetal, 0.1, 0.62, 0);
     kit.sailMesh(group, 0.38, 0.58, kit.sail("#f1e8d4"), 0.21, 0.36, 0.012);
     kit.sailMesh(group, 0.22, 0.46, kit.sail("#e7dcc4"), 0.17, 0.34, 0.014, Math.PI);
-    kit.sailMesh(group, 0.16, 0.32, kit.sail(accentMatColor(model)), 0.2, 0.35, -0.014);
+    kit.sailMesh(group, 0.16, 0.32, kit.sail(model.accent), 0.2, 0.35, -0.014);
     kit.box(group, length * 0.16, 0.025, width * 0.3, accentMat, -length * 0.3, 0.15, 0);
   } else if (vessel === "fishing") {
     waterBase(length + 0.35, width + 0.4);
@@ -3013,7 +3013,7 @@ function buildMaritime(asset, kit, rng) {
     kit.box(group, length * 0.1, 0.07, width * 0.5, kit.darkWindow, -length * 0.16, 0.26, width * 0.2);
     kit.box(group, 0.02, 0.55, 0.02, kit.darkMetal, 0.08, 0.44, 0);
     kit.box(group, 0.24, 0.018, 0.018, kit.darkMetal, 0.2, 0.58, 0);
-    kit.box(group, 0.08, 0.3, 0.02, kit.sail(accentMatColor(model)), 0.32, 0.42, 0);
+    kit.box(group, 0.08, 0.3, 0.02, kit.sail(model.accent), 0.32, 0.42, 0);
     kit.cyl(group, 0.11, 0.06, kit.material("#6f8f50"), -0.24, 0.18, 0.1, { segments: 8 });
     for (let net = 0; net < 3; net += 1) {
       kit.box(group, 0.16, 0.05, 0.12, kit.material("#c5b58d"), -0.34 + net * 0.18, 0.19, -0.18);
@@ -3089,68 +3089,2087 @@ function buildMaritime(asset, kit, rng) {
   return group;
 }
 
-function accentMatColor(model) {
-  return model.accent;
+// ---- Skyscrapers -------------------------------------------------------
+//
+// Reference-driven reconstruction. Vertical dimensions keep a single real
+// metre -> voxel conversion for every tower, so the skyline stays honest
+// (Burj Khalifa is 2.6x Chrysler, not a random 10-13 units like before).
+// Plan dimensions get a small "girth" multiplier: at this voxel density a
+// 1:1 plan would be a 2-pixel sliver in the archive thumbnail, while the
+// silhouette, setbacks and crowns are what actually identify a building.
+//
+// References live in docs/skyscrapers/reference-*.md; every landmark builder
+// below follows those tables (metre heights, tier widths, crown ratios).
+const TOWER_METRE = 0.0247; // voxel units per real metre (828 m -> 20.4 u)
+const TOWER_GIRTH = 1.65; // plan fudge so facades keep readable detail
+const tw = (metres) => metres * TOWER_METRE * TOWER_GIRTH;
+const th = (metres) => metres * TOWER_METRE;
+const mix = (a, b, t) => a + (b - a) * t;
+
+function towerMaterials(kit, rng, model) {
+  const accentColor = model.accent ?? "#ffd166";
+  const wall = pick(rng, model.walls);
+  // Metalness stays moderate: the archive has no environment map, so highly
+  // metallic materials render almost black instead of shiny.
+  const glass = kit.material(model.glass ?? "#8fb8c4", { roughness: 0.2, metalness: 0.34 });
+  return {
+    rng,
+    glass,
+    glassSoft: kit.material(model.glass ?? "#8fb8c4", { roughness: 0.32, metalness: 0.24 }),
+    mullion: kit.material(model.mullion ?? "#d9ddd6", { roughness: 0.32, metalness: 0.36 }),
+    dark: kit.material("#2c363d", { roughness: 0.42, metalness: 0.3 }),
+    accent: kit.material(accentColor, {
+      roughness: 0.45,
+      metalness: 0.25,
+      emissive: accentColor,
+      emissiveIntensity: 0.34,
+    }),
+    roof: kit.material(model.roof ?? "#46545c", { roughness: 0.55, metalness: 0.18 }),
+    structure: kit.material(wall, { roughness: 0.52, metalness: 0.16 }),
+    stone: kit.material(wall, { roughness: 0.82, metalness: 0.04 }),
+    steel: kit.material("#ccd2d6", { roughness: 0.26, metalness: 0.4 }),
+    steelDark: kit.material("#9aa2a8", { roughness: 0.36, metalness: 0.3 }),
+    concrete: kit.material("#b6afa2", { roughness: 0.92 }),
+    podium: kit.material("#39424a", { roughness: 0.46, metalness: 0.24 }),
+    paving: kit.material("#b7afa1", { roughness: 0.96 }),
+    planter: kit.material("#6f8f5c", { roughness: 0.98 }),
+    window: kit.material("#ffd79a", {
+      roughness: 0.42,
+      metalness: 0.1,
+      emissive: "#ffb354",
+      emissiveIntensity: 0.5,
+    }),
+  };
 }
+
+// Shared plinth. Every tower in the archive stands on a small raised deck, so
+// the models do not need per-builder ground planes.
+function towerPlaza(kit, parent, options) {
+  const {
+    span,
+    depth = span,
+    mat,
+    raised = 0.06,
+    round = false,
+    hedge = true,
+    lamps = true,
+    trees = 0,
+    fountain = false,
+  } = options;
+  if (round) {
+    kit.cyl(parent, span / 2, raised, mat.paving, 0, raised / 2, 0, { segments: 24, outline: true });
+    kit.cyl(parent, span * 0.44, 0.02, kit.trim, 0, raised + 0.01, 0, { segments: 24 });
+  } else {
+    kit.box(parent, span, raised, depth, mat.paving, 0, raised / 2, 0, { outline: true });
+    kit.box(parent, span * 0.94, 0.02, depth * 0.94, kit.trim, 0, raised + 0.01, 0);
+  }
+  const deck = raised + 0.02;
+  kit.box(parent, span * 0.58, 0.008, 0.05, mat.accent, 0, deck, depth * 0.36, { outline: false });
+  kit.box(parent, 0.05, 0.008, depth * 0.3, mat.accent, span * 0.36, deck, 0, { outline: false });
+  if (hedge) {
+    for (const side of [-1, 1]) {
+      kit.box(parent, span * 0.66, 0.045, 0.09, mat.planter, 0, deck + 0.0225, side * depth * 0.4);
+    }
+  }
+  if (lamps) {
+    for (const sx of [-1, 1]) {
+      addLamp(kit, parent, { x: sx * span * 0.44, z: depth * 0.46, y: deck, height: 0.46 });
+    }
+  }
+  for (let index = 0; index < trees; index += 1) {
+    const angle = (index / Math.max(1, trees)) * TAU + 0.6;
+    addTree(kit, parent, {
+      x: Math.cos(angle) * span * 0.4,
+      z: Math.sin(angle) * span * 0.34,
+      scale: 0.42,
+      kind: index % 2 === 0 ? "broadleaf" : "conifer",
+    });
+  }
+  if (fountain) {
+    kit.cyl(parent, span * 0.1, 0.035, mat.mullion, 0, deck + 0.0175, 0, { segments: 24 });
+    kit.cyl(parent, span * 0.085, 0.02, kit.water, 0, deck + 0.04, 0, { segments: 24 });
+    kit.cyl(parent, 0.014, 0.12, kit.water, 0, deck + 0.1, 0, { segments: 8 });
+  }
+  return deck;
+}
+
+// Transparent lobby with stone piers plus an entrance canopy.
+function towerLobby(kit, parent, options) {
+  const {
+    x = 0,
+    z = 0,
+    width,
+    depth,
+    height,
+    mat,
+    y0 = 0.06,
+    stone = false,
+    canopy = true,
+  } = options;
+  if (stone) {
+    kit.box(parent, width * 1.02, height, depth * 1.02, mat.stone, x, y0 + height / 2, z, { outline: true });
+    kit.box(parent, width * 0.94, height * 0.82, depth * 0.94, mat.window, x, y0 + height * 0.45, z, {
+      outline: false,
+    });
+  } else {
+    kit.box(parent, width, height, depth, mat.glassSoft, x, y0 + height / 2, z, { outline: true });
+    kit.box(parent, width * 0.96, height * 0.9, depth * 0.96, mat.window, x, y0 + height * 0.46, z, {
+      outline: false,
+    });
+    kit.box(parent, width * 1.03, 0.05, depth * 1.03, kit.trim, x, y0 + 0.025, z);
+    kit.box(parent, width * 1.03, 0.05, depth * 1.03, kit.trim, x, y0 + height - 0.025, z);
+    const columns = Math.max(3, Math.round(width / 0.26));
+    for (let index = 0; index <= columns; index += 1) {
+      const cx = x - width / 2 + (width * index) / columns;
+      for (const side of [-1, 1]) {
+        kit.box(parent, 0.045, height, 0.045, mat.mullion, cx, y0 + height / 2, z + side * (depth / 2 + 0.01), {
+          outline: false,
+        });
+      }
+    }
+  }
+  if (canopy) {
+    kit.box(parent, width * 0.52, 0.022, 0.3, mat.mullion, x, y0 + height * 0.86, z + depth / 2 + 0.16);
+    kit.box(parent, width * 0.52, 0.01, 0.3, mat.accent, x, y0 + height * 0.86 - 0.02, z + depth / 2 + 0.16, {
+      outline: false,
+    });
+    kit.box(parent, 0.34, height * 0.6, 0.028, mat.dark, x, y0 + height * 0.3, z + depth / 2 + 0.018);
+  }
+  return y0 + height;
+}
+
+// Glass curtain wall with mullions, floor bands and sparse lit windows.
+function towerCurtain(kit, parent, options) {
+  const {
+    width,
+    depth,
+    height,
+    y0,
+    floors = 20,
+    mat,
+    finStep = 0.26,
+    finWidth = 0.024,
+    bandEvery = 2,
+    litChance = 0.26,
+    cornerBlades = true,
+    glassMaterial,
+    bandMaterial,
+  } = options;
+  const midY = y0 + height / 2;
+  const glass = glassMaterial ?? mat.glass;
+  const bands = bandMaterial ?? mat.mullion;
+  kit.box(parent, width, height, depth, glass, 0, midY, 0, { outline: true });
+
+  const columns = Math.max(3, Math.round(width / finStep));
+  const rows = Math.max(3, Math.round(depth / finStep));
+  for (let index = 0; index < columns; index += 1) {
+    const x = -width / 2 + (width / columns) * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(parent, finWidth, height, finWidth * 1.4, bands, x, midY, side * (depth / 2 + 0.008), {
+        outline: false,
+      });
+    }
+  }
+  for (let index = 0; index < rows; index += 1) {
+    const z = -depth / 2 + (depth / rows) * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(parent, finWidth * 1.4, height, finWidth, bands, side * (width / 2 + 0.008), midY, z, {
+        outline: false,
+      });
+    }
+  }
+  if (cornerBlades) {
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        kit.box(parent, 0.075, height + 0.01, 0.075, bands, (sx * width) / 2, midY, (sz * depth) / 2, {
+          ry: Math.PI / 4,
+          outline: false,
+        });
+      }
+    }
+  }
+  const floorCount = Math.max(2, Math.round(floors));
+  for (let floor = bandEvery; floor < floorCount; floor += bandEvery) {
+    kit.box(parent, width + 0.02, 0.012, depth + 0.02, bands, 0, y0 + (floor * height) / floorCount, 0, {
+      outline: false,
+    });
+  }
+  for (let floor = 0; floor < floorCount; floor += 1) {
+    if (mat.rng() >= litChance) continue;
+    kit.box(
+      parent,
+      width + 0.004,
+      Math.max(0.012, (height / floorCount) * 0.4),
+      depth + 0.004,
+      mat.window,
+      0,
+      y0 + ((floor + 0.5) * height) / floorCount,
+      0,
+      { outline: false }
+    );
+  }
+}
+
+// Stone-and-glass deco shaft: masonry mass with narrow recessed window slits
+// and light horizontal spandrels. Used by the Empire State and Chrysler.
+function towerMasonry(kit, parent, options) {
+  const {
+    width,
+    depth,
+    height,
+    y0,
+    mat,
+    floors = 20,
+    pierStep = 0.19,
+    pierWidth = 0.075,
+    bandEvery = 2,
+    pierMaterial,
+    spandrelMaterial,
+    cornerColor = true,
+  } = options;
+  const midY = y0 + height / 2;
+  const wall = pierMaterial ?? mat.stone;
+  const spandrel = spandrelMaterial ?? mat.mullion;
+  // Masonry mass dominates; windows are narrow slits cut into it.
+  kit.box(parent, width, height, depth, wall, 0, midY, 0, { outline: true });
+  const columns = Math.max(3, Math.round(width / pierStep));
+  const rows = Math.max(3, Math.round(depth / pierStep));
+  const slit = Math.max(0.02, pierWidth);
+  for (let index = 0; index < columns; index += 1) {
+    const x = -width / 2 + (width / columns) * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(parent, slit, height, 0.008, mat.dark, x, midY, side * (depth / 2 + 0.004), { outline: false });
+    }
+  }
+  for (let index = 0; index < rows; index += 1) {
+    const z = -depth / 2 + (depth / rows) * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(parent, 0.008, height, slit, mat.dark, side * (width / 2 + 0.004), midY, z, { outline: false });
+    }
+  }
+  if (cornerColor) {
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        kit.box(parent, 0.09, height, 0.09, wall, (sx * width) / 2, midY, (sz * depth) / 2, {
+          ry: Math.PI / 4,
+          outline: false,
+        });
+      }
+    }
+  }
+  const floorCount = Math.max(2, Math.round(floors));
+  for (let floor = bandEvery; floor < floorCount; floor += bandEvery) {
+    kit.box(parent, width + 0.012, 0.014, depth + 0.012, spandrel, 0, y0 + (floor * height) / floorCount, 0, {
+      outline: false,
+    });
+  }
+  // Sparse lit windows inside the slits.
+  for (let floor = 0; floor < floorCount; floor += 1) {
+    if (mat.rng() > 0.2) continue;
+    kit.box(parent, width + 0.002, Math.max(0.01, (height / floorCount) * 0.4), depth + 0.002, mat.window, 0, y0 + ((floor + 0.5) * height) / floorCount, 0, {
+      outline: false,
+    });
+  }
+}
+
+function towerRailing(kit, parent, options) {
+  const { width, depth, y, mat, height = 0.09, spacing = 0.16 } = options;
+  const count = Math.max(3, Math.min(16, Math.round(width / spacing)));
+  for (let index = 0; index < count; index += 1) {
+    const x = -width / 2 + (width * index) / (count - 1);
+    for (const side of [-1, 1]) {
+      kit.box(parent, 0.012, height, 0.012, mat.mullion, x, y + height / 2, side * depth * 0.48, {
+        outline: false,
+      });
+    }
+  }
+  for (const side of [-1, 1]) {
+    kit.box(parent, width, 0.014, 0.014, mat.mullion, 0, y + height, side * depth * 0.48, { outline: false });
+    kit.box(parent, 0.014, 0.014, depth * 0.96, mat.mullion, side * width * 0.48, y + height, 0, { outline: false });
+  }
+}
+
+function towerParapet(kit, parent, options) {
+  const { width, depth, y, mat, height = 0.05, thickness = 0.035 } = options;
+  for (const side of [-1, 1]) {
+    kit.box(parent, width, height, thickness, mat, 0, y + height / 2, side * (depth / 2 - thickness / 2), {
+      outline: false,
+    });
+    kit.box(parent, thickness, height, depth, mat, side * (width / 2 - thickness / 2), y + height / 2, 0, {
+      outline: false,
+    });
+  }
+}
+
+// Thin tapered mast. Used for antennae and supertall spires.
+function towerNeedle(kit, parent, options) {
+  const {
+    x = 0,
+    z = 0,
+    y,
+    height,
+    baseRadius,
+    topRadius = 0.012,
+    mat,
+    material,
+    rings = 2,
+    beacon = "#ff8178",
+  } = options;
+  const mastMat = material ?? mat.steelDark;
+  kit.taper(parent, Math.max(0.006, topRadius), Math.max(0.008, baseRadius), height, mastMat, x, y + height / 2, z, {
+    segments: 10,
+    outline: false,
+  });
+  for (let index = 1; index <= rings; index += 1) {
+    const t = index / (rings + 1);
+    const radius = mix(baseRadius, topRadius, t) * 1.9 + 0.012;
+    kit.cyl(parent, radius, 0.012, mat.mullion, x, y + height * t, z, { segments: 10, outline: false });
+  }
+  kit.ico(parent, Math.max(0.022, topRadius * 1.3), kit.glow(beacon), x, y + height + 0.02, z);
+}
+
+function towerRoofDeck(kit, parent, options) {
+  const { width, depth, y, mat, machinery = true, railing = false, beacons = 2 } = options;
+  kit.box(parent, width + 0.03, 0.03, depth + 0.03, mat.mullion, 0, y + 0.015, 0);
+  if (machinery) {
+    kit.box(parent, width * 0.5, 0.16, depth * 0.44, mat.dark, 0, y + 0.11, 0, { outline: true });
+    kit.box(parent, width * 0.56, 0.02, depth * 0.5, mat.mullion, 0, y + 0.2, 0);
+    kit.box(parent, width * 0.2, 0.12, depth * 0.2, mat.dark, width * 0.18, y + 0.09, -depth * 0.12);
+  }
+  if (railing) towerRailing(kit, parent, { width, depth, y: y + 0.03, mat, height: 0.08 });
+  for (let index = 0; index < beacons; index += 1) {
+    const side = index % 2 === 0 ? -1 : 1;
+    const end = index < 2 ? 1 : -1;
+    kit.ico(parent, 0.018, kit.glow("#ff8178"), side * width * 0.42, y + 0.06, end * depth * 0.42);
+  }
+  return y;
+}
+
+// ---- One World Trade Center (1973 twins) --------------------------------
+// Zero setbacks: two 63.4 m square prisms on a raised plaza. The facade is
+// almost pure aluminium pinstripes with 18-inch windows, and the base folds
+// into three-pronged "tridents". North tower carries the 110 m antenna.
+function buildTradeTwins(group, { kit, rng, mat }) {
+  const base = 0.06;
+  const side = tw(63.4);
+  const centre = tw(126.8) / 2;
+  const plaza = tw(228);
+  towerPlaza(kit, group, { span: plaza * 0.82, mat, raised: base, hedge: false, lamps: true });
+
+  // Koenig sphere on its fountain ring, between the towers.
+  const sculpture = new THREE.Group();
+  sculpture.position.set(0, base, 0);
+  group.add(sculpture);
+  const bronze = kit.material("#8a6c4c", { roughness: 0.42, metalness: 0.55 });
+  kit.cyl(sculpture, tw(11), 0.05, mat.steelDark, 0, 0.025, 0, { segments: 16, outline: true });
+  kit.cyl(sculpture, tw(9.5), 0.02, kit.water, 0, 0.05, 0, { segments: 16 });
+  kit.sphere(sculpture, tw(4), bronze, 0, 0.05 + tw(4), 0, { outline: false });
+
+  const sides = [1, -1];
+  const towerTops = [];
+  sides.forEach((sign, index) => {
+    const tower = new THREE.Group();
+    tower.position.set(sign * centre, base, 0);
+    group.add(tower);
+    const isNorth = index === 0;
+    const total = th(isNorth ? 417 : 415.1);
+    const lobbyTop = buildTradeBase(kit, tower, { width: side, height: th(18), mat });
+    buildTradeShaft(kit, tower, {
+      width: side,
+      height: total - lobbyTop,
+      y0: lobbyTop,
+      mat,
+      litChance: 0.16,
+    });
+    towerRoofDeck(kit, tower, {
+      width: side,
+      depth: side,
+      y: total,
+      mat,
+      machinery: true,
+      railing: false,
+    });
+    towerParapet(kit, tower, { width: side, depth: side, y: total + 0.035, mat: mat.mullion, height: 0.05 });
+    kit.box(tower, side * 0.88, 0.04, side * 0.88, mat.steel, 0, total + 0.04, 0);
+    if (isNorth) {
+      towerNeedle(kit, tower, {
+        y: total + 0.08,
+        height: th(110),
+        baseRadius: tw(2.6) / 2,
+        topRadius: tw(0.3) / 2,
+        rings: 5,
+        mat,
+        material: mat.steelDark,
+      });
+    } else {
+      kit.box(tower, side * 0.4, 0.1, side * 0.3, mat.dark, 0, total + 0.08, -side * 0.1);
+    }
+    towerTops.push(total);
+  });
+  return group;
+}
+
+function buildTradeBase(kit, parent, { width, height, mat }) {
+  // Three-storey lobby recessed behind the aluminium tridents.
+  kit.box(parent, width * 0.9, height * 0.94, width * 0.9, mat.dark, 0, height / 2, 0, { outline: true });
+  kit.box(parent, width * 0.72, height * 0.5, width * 0.72, mat.window, 0, height * 0.36, 0, {
+    outline: false,
+  });
+  const faces = [
+    { ry: 0, px: 0, pz: width / 2 },
+    { ry: Math.PI, px: 0, pz: -width / 2 },
+    { ry: Math.PI / 2, px: width / 2, pz: 0 },
+    { ry: -Math.PI / 2, px: -width / 2, pz: 0 },
+  ];
+  const prong = width * 0.09;
+  for (const face of faces) {
+    for (let index = -1; index <= 1; index += 1) {
+      const holder = new THREE.Group();
+      holder.position.set(face.px, 0, face.pz);
+      holder.rotation.y = face.ry;
+      parent.add(holder);
+      const centreX = index * width * 0.3;
+      kit.box(holder, 0.06, height, 0.055, mat.steel, centreX, height / 2, 0.02, { outline: false });
+      for (const side of [-1, 1]) {
+        kit.box(holder, 0.052, height * 0.76, 0.05, mat.steel, centreX + side * prong, height * 0.38, 0.02, {
+          outline: false,
+        });
+        kit.box(holder, 0.046, height * 0.36, 0.045, mat.steel, centreX + side * prong * 0.55, height * 0.84, 0.02, {
+          rz: side * 0.62,
+          outline: false,
+        });
+      }
+      kit.box(holder, prong * 2 + 0.06, 0.022, 0.06, mat.mullion, centreX, height * 0.99, 0.02, {
+        outline: false,
+      });
+    }
+  }
+  return height;
+}
+
+function buildTradeShaft(kit, parent, { width, height, y0, mat, litChance = 0.16 }) {
+  const midY = y0 + height / 2;
+  // Aluminium-clad column skin: the tower reads silver, not glazed, because
+  // only narrow 18-inch windows break the piers.
+  kit.box(parent, width, height, width, mat.mullion, 0, midY, 0, { outline: true });
+  const piers = 23;
+  const step = width / piers;
+  for (let index = 0; index < piers; index += 1) {
+    const offset = -width / 2 + step * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(parent, step * 0.34, height, 0.012, mat.dark, offset, midY, side * (width / 2 + 0.004), {
+        outline: false,
+      });
+      kit.box(parent, 0.012, height, step * 0.34, mat.dark, side * (width / 2 + 0.004), midY, offset, {
+        outline: false,
+      });
+    }
+  }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      kit.box(parent, 0.12, height, 0.12, mat.mullion, (sx * width) / 2, midY, (sz * width) / 2, {
+        outline: false,
+      });
+    }
+  }
+  // Sky-lobby and mechanical spandrels are the only horizontal accents.
+  for (const metre of [167, 296, 380]) {
+    const bandY = y0 + th(metre - 18);
+    if (bandY <= y0 + height) {
+      kit.box(parent, width + 0.02, 0.02, width + 0.02, mat.steelDark, 0, bandY, 0, { outline: false });
+    }
+  }
+  const rows = 22;
+  for (let row = 1; row < rows; row += 1) {
+    if (mat.rng() > litChance) continue;
+    kit.box(parent, width + 0.004, 0.012, width + 0.004, mat.window, 0, y0 + (height * row) / rows, 0, {
+      outline: false,
+    });
+  }
+}
+// ---- Empire State Building ----------------------------------------------
+// The massing trick most voxel models miss: the biggest setback happens at the
+// fifth floor (the base fills the whole 129.5 x 57 m lot) and the tower shaft
+// between 30F and 72F is dead straight. The identity lives in the chiselled
+// limestone ledges, the straight shaft and the 112 m crown + mast + antenna.
+function buildEmpireState(group, { kit, mat }) {
+  const base = 0.06;
+  const tiers = [
+    { w: 129.5, d: 57, h: 22, kind: "base" },
+    { w: 110, d: 50, h: 56, kind: "shaft" },
+    { w: 90, d: 45, h: 15, kind: "shaft" },
+    { w: 72, d: 40, h: 18, kind: "shaft" },
+    { w: 60, d: 35, h: 143, kind: "shaft" },
+    { w: 50, d: 32, h: 31, kind: "shaft" },
+    { w: 42, d: 30, h: 15, kind: "shaft" },
+    { w: 35, d: 28, h: 20, kind: "shaft" },
+  ];
+  towerPlaza(kit, group, { span: tw(150), depth: tw(80), mat, raised: base, hedge: false, lamps: true });
+
+  let y = base;
+  tiers.forEach((tier, index) => {
+    const width = tw(tier.w);
+    const depth = tw(tier.d);
+    const height = th(tier.h);
+    if (tier.kind === "base") {
+      buildEmpireBase(kit, group, { width, depth, height, mat, y });
+    } else {
+      towerMasonry(kit, group, {
+        width,
+        depth,
+        height,
+        y0: y,
+        mat,
+        floors: Math.max(4, Math.round(tier.h / 3.7)),
+        pierStep: 0.16,
+        pierWidth: 0.055,
+        bandEvery: 2,
+      });
+    }
+    if (index < tiers.length - 1) {
+      // Limestone setback ledge with a dark reveal underneath.
+      kit.box(group, width + 0.05, 0.03, depth + 0.05, mat.stone, 0, y + height + 0.015, 0);
+      kit.box(group, width + 0.055, 0.012, depth + 0.055, mat.dark, 0, y + height - 0.006, 0, {
+        outline: false,
+      });
+      kit.box(group, width + 0.06, 0.008, depth + 0.06, mat.accent, 0, y + height + 0.034, 0, {
+        outline: false,
+      });
+    }
+    y += height;
+  });
+
+  // 86F open-air observation deck: an overhanging slab, a railing and a small
+  // glass pavilion behind it. The open ring is an Empire State signature.
+  const deckWidth = tw(44);
+  const deckDepth = tw(34);
+  kit.box(group, deckWidth, 0.04, deckDepth, mat.stone, 0, y + 0.02, 0, { outline: true });
+  kit.box(group, deckWidth + 0.02, 0.014, deckDepth + 0.02, mat.mullion, 0, y + 0.045, 0, { outline: false });
+  kit.box(group, tw(30), 0.17, tw(21), mat.glassSoft, 0, y + 0.11, 0, { outline: true });
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      kit.box(group, 0.03, 0.17, 0.03, mat.mullion, (sx * tw(30)) / 2, y + 0.09, (sz * tw(21)) / 2, {
+        outline: false,
+      });
+    }
+  }
+  towerRailing(kit, group, { width: deckWidth, depth: deckDepth, y: y + 0.04, mat, height: 0.1 });
+  kit.box(group, deckWidth + 0.02, 0.012, deckDepth + 0.02, mat.accent, 0, y + 0.145, 0, { outline: false });
+  let crownY = y + 0.04;
+
+  // Five-step art-deco crown ("spire" floors 87-102) then the mooring mast.
+  const crownSteps = [
+    { w: 28, d: 24, h: 9 },
+    { w: 22, d: 20, h: 11 },
+    { w: 16, d: 16, h: 12 },
+    { w: 11, d: 11, h: 10 },
+    { w: 7, d: 7, h: 8 },
+  ];
+  crownSteps.forEach((step, index) => {
+    const stepWidth = tw(step.w);
+    const stepDepth = tw(step.d);
+    const stepHeight = th(step.h);
+    towerMasonry(kit, group, {
+      width: stepWidth,
+      depth: stepDepth,
+      height: stepHeight,
+      y0: crownY,
+      mat,
+      floors: 4,
+      pierStep: 0.13,
+      pierWidth: 0.04,
+      bandEvery: 1,
+    });
+    const glow = index % 2 === 0 ? mat.accent : mat.mullion;
+    kit.box(group, stepWidth + 0.04, 0.014, stepDepth + 0.04, glow, 0, crownY + stepHeight * 0.55, 0, {
+      outline: false,
+    });
+    kit.box(group, stepWidth + 0.03, 0.02, stepDepth + 0.03, mat.stone, 0, crownY + stepHeight + 0.01, 0);
+    kit.box(group, stepWidth + 0.03, 0.008, stepDepth + 0.03, mat.dark, 0, crownY + stepHeight - 0.008, 0, {
+      outline: false,
+    });
+    crownY += stepHeight;
+  });
+
+  // Octagonal mooring mast with vertical fins and a shallow dome.
+  const mastHeight = th(7);
+  kit.cyl(group, tw(4.2), mastHeight, mat.stone, 0, crownY + mastHeight / 2, 0, {
+    segments: 8,
+    ry: Math.PI / 8,
+    outline: true,
+  });
+  for (let index = 0; index < 8; index += 1) {
+    const angle = Math.PI / 8 + (index / 8) * TAU;
+    kit.box(group, 0.025, mastHeight, 0.025, mat.mullion, Math.cos(angle) * tw(4.1), crownY + mastHeight / 2, Math.sin(angle) * tw(4.1), {
+      outline: false,
+    });
+  }
+  kit.box(group, tw(9), 0.022, tw(9), mat.accent, 0, crownY + mastHeight * 0.34, 0, { outline: false });
+  kit.add(group, kit.domeGeometry, mat.stone, 0, crownY + mastHeight, 0, tw(9.4), th(3.4) * 2, tw(9.4), {
+    outline: false,
+  });
+  const tipY = crownY + mastHeight + th(3.4);
+  kit.cyl(group, tw(2.4), 0.05, mat.steelDark, 0, tipY + 0.025, 0, { segments: 8 });
+
+  // The 1950 television antenna: 62 m of thin lattice above the mast.
+  towerNeedle(kit, group, {
+    y: tipY + 0.02,
+    height: th(62),
+    baseRadius: tw(2.4) / 2,
+    topRadius: tw(0.32) / 2,
+    rings: 4,
+    mat,
+    material: mat.steelDark,
+  });
+  return group;
+}
+
+function buildEmpireBase(kit, parent, { width, depth, height, mat, y }) {
+  kit.box(parent, width, height, depth, mat.stone, 0, y + height / 2, 0, { outline: true });
+  // Black granite ground floor, then limestone with a shadow reveal.
+  kit.box(parent, width + 0.004, height * 0.3, depth + 0.004, mat.dark, 0, y + height * 0.15, 0, {
+    outline: false,
+  });
+  kit.box(parent, width + 0.006, 0.012, depth + 0.006, mat.mullion, 0, y + height * 0.3, 0, {
+    outline: false,
+  });
+  // Storefront glazing along the long (south) facade.
+  for (const side of [-1, 1]) {
+    kit.box(parent, width * 0.78, height * 0.2, 0.03, mat.window, 0, y + height * 0.16, side * (depth / 2 + 0.008), {
+      outline: false,
+    });
+  }
+  // Three-storey Fifth Avenue entrance with gold signage and canopy.
+  kit.box(parent, width * 0.32, height * 0.62, 0.05, mat.window, 0, y + height * 0.42, depth / 2 + 0.01, {
+    outline: false,
+  });
+  kit.box(parent, width * 0.36, 0.035, 0.028, mat.accent, 0, y + height * 0.55, depth / 2 + 0.04, {
+    outline: false,
+  });
+  kit.box(parent, width * 0.34, 0.018, 0.22, mat.steel, 0, y + height * 0.36, depth / 2 + 0.12);
+  for (const side of [-1, 1]) {
+    kit.box(parent, 0.06, height, 0.06, mat.stone, side * width * 0.18, y + height / 2, depth / 2 + 0.03);
+    kit.ico(parent, 0.026, mat.steelDark, side * width * 0.18, y + height * 0.66, depth / 2 + 0.045);
+  }
+  // Vertical pier rhythm around the whole base.
+  const columns = Math.round(width / 0.22);
+  for (let index = 0; index < columns; index += 1) {
+    const x = -width / 2 + (width / columns) * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(parent, 0.03, height * 0.7, 0.03, mat.stone, x, y + height * 0.65, side * (depth / 2 + 0.012), {
+        outline: false,
+      });
+    }
+  }
+}
+
+// ---- Chrysler Building ---------------------------------------------------
+// The crown is the building: seven telescoping stainless arches with
+// triangular windows, plus a 45 m needle - together 30% of the height. The
+// shaft above 31F is only ~40 m wide, the thinnest of the four US landmarks.
+function buildChrysler(group, { kit, mat }) {
+  const base = 0.06;
+  towerPlaza(kit, group, { span: tw(92), depth: tw(84), mat, raised: base, hedge: false, lamps: true });
+
+  let y = base;
+  // Brick and marble base with the proscenium entrance.
+  const baseHeight = th(55);
+  kit.box(group, tw(61.3), baseHeight, tw(55), mat.stone, 0, y + baseHeight / 2, 0, { outline: true });
+  kit.box(group, tw(61.5), baseHeight * 0.28, tw(55.2), mat.dark, 0, y + baseHeight * 0.14, 0, {
+    outline: false,
+  });
+  kit.box(group, tw(35), baseHeight * 0.36, 0.06, mat.window, 0, y + baseHeight * 0.34, tw(55) / 2 + 0.01, {
+    outline: false,
+  });
+  kit.box(group, tw(38), 0.03, 0.03, mat.accent, 0, y + baseHeight * 0.52, tw(55) / 2 + 0.04, {
+    outline: false,
+  });
+  kit.box(group, tw(40), 0.02, 0.42, mat.steel, 0, y + baseHeight * 0.3, tw(55) / 2 + 0.22);
+  for (const side of [-1, 1]) {
+    kit.box(group, 0.06, baseHeight, 0.06, mat.mullion, side * tw(28), y + baseHeight / 2, tw(55) / 2 + 0.03);
+  }
+  for (let index = 0; index < 4; index += 1) {
+    const side = index < 2 ? -1 : 1;
+    const end = index % 2 === 0 ? -1 : 1;
+    kit.box(group, 0.05, baseHeight, 0.05, mat.mullion, side * tw(30), y + baseHeight / 2, end * tw(26), {
+      outline: false,
+    });
+  }
+  y += baseHeight;
+
+  // Dense setback stack from 16F to 31F; each ledge gets a marble band.
+  const setbacks = [
+    { w: 58, d: 52, h: 7 },
+    { w: 55, d: 50, h: 17 },
+    { w: 50, d: 46, h: 17 },
+    { w: 46, d: 43, h: 11 },
+  ];
+  setbacks.forEach((tier, index) => {
+    towerMasonry(kit, group, {
+      width: tw(tier.w),
+      depth: tw(tier.d),
+      height: th(tier.h),
+      y0: y,
+      mat,
+      floors: Math.max(3, Math.round(tier.h / 3.66)),
+      pierStep: 0.17,
+      pierWidth: 0.06,
+      bandEvery: 2,
+    });
+    kit.box(group, tw(tier.w) + 0.04, 0.026, tw(tier.d) + 0.04, mat.mullion, 0, y + th(tier.h) + 0.013, 0);
+    kit.box(group, tw(tier.w) + 0.045, 0.01, tw(tier.d) + 0.045, mat.accent, 0, y + th(tier.h) + 0.032, 0, {
+      outline: false,
+    });
+    if (index === 0) {
+      // 31F hubcap frieze and the four chrome hubcap/wing-cap ornaments.
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          kit.cyl(group, tw(2.4), 0.05, mat.steel, sx * tw(28), y + th(tier.h) + 0.04, sz * tw(25), {
+            rz: Math.PI / 2,
+            ry: Math.PI / 4,
+            segments: 12,
+            outline: false,
+          });
+        }
+      }
+    }
+    y += th(tier.h);
+  });
+
+  // 31F-60F: the trademark straight shaft, narrow and almost immaculate.
+  const shaftWidth = tw(40);
+  const shaftDepth = tw(38);
+  const shaftHeight = th(109);
+  towerMasonry(kit, group, {
+    width: shaftWidth,
+    depth: shaftDepth,
+    height: shaftHeight,
+    y0: y,
+    mat,
+    floors: 30,
+    pierStep: 0.14,
+    pierWidth: 0.05,
+    bandEvery: 2,
+  });
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      kit.box(group, 0.05, shaftHeight, 0.05, mat.dark, (sx * shaftWidth) / 2, y + shaftHeight / 2, (sz * shaftDepth) / 2, {
+        outline: false,
+      });
+    }
+  }
+  y += shaftHeight;
+
+  // Maltese-cross transition at 60-62F, then the eagles at the crown base.
+  kit.box(group, tw(33), th(8), tw(32), mat.stone, 0, y + th(4), 0, { outline: true });
+  for (let index = 0; index < 4; index += 1) {
+    const angle = Math.PI / 4 + (index / 4) * TAU;
+    kit.box(group, tw(4), th(8), tw(9), mat.stone, Math.cos(angle) * tw(12), y + th(4), Math.sin(angle) * tw(12), {
+      ry: -angle,
+      outline: false,
+    });
+    kit.ico(group, tw(2.2), mat.steel, Math.cos(angle) * tw(17), y + th(7), Math.sin(angle) * tw(16), {
+      squash: 0.8,
+    });
+  }
+
+  // Seven telescoping stainless arches: a dark drum, a terrace ledge, a
+  // glazed half-disc and a bright tubular arch on every face. The nested
+  // rings read as the sunburst crown from any angle.
+  const crownBase = y + th(8);
+  const crownSteps = 7;
+  for (let index = 0; index < crownSteps; index += 1) {
+    const t = index / (crownSteps - 1);
+    const radius = mix(tw(14.5), tw(5.2), t);
+    const depth = mix(tw(23), tw(9), t);
+    const tierY = crownBase + th(6.6) * index;
+    // Dark drum behind the arches keeps the crown solid but stays narrow so
+    // the stainless arches define the silhouette.
+    kit.box(group, radius * 1.45, th(7.4), depth * 0.86, mat.dark, 0, tierY + th(3.7), 0, {
+      outline: index === 0,
+    });
+    // Terrace ledge between arches.
+    kit.box(group, radius * 2 + 0.04, 0.018, depth + 0.04, mat.steel, 0, tierY + 0.009, 0);
+    // Glazed half-disc + glowing triangular windows + tubular arch, per face.
+    for (const side of [-1, 1]) {
+      const faceZ = side * (depth / 2 + 0.004);
+      kit.add(group, kit.domeGeometry, mat.glass, 0, tierY, faceZ, radius * 1.92, radius * 1.9 * 2, 0.02, {
+        outline: false,
+      });
+      kit.rack(group, radius, mat.steel, 0, tierY, faceZ + side * 0.01, {
+        ry: side > 0 ? 0 : Math.PI,
+        outline: false,
+      });
+      // Nested sunburst arches inside each tier (the Chrysler crown reads as
+      // a stack of concentric stainless arcs on every facade).
+      for (let ring = 1; ring <= 3; ring += 1) {
+        kit.rack(
+          group,
+          radius * (1 - ring * 0.24),
+          ring % 2 === 0 ? mat.steelDark : mat.steel,
+          0,
+          tierY,
+          faceZ + side * (0.014 + ring * 0.004),
+          { ry: side > 0 ? 0 : Math.PI, outline: false }
+        );
+      }
+      for (const spot of [-0.34, 0.02, 0.38]) {
+        kit.sailMesh(group, radius * 0.24, th(3.6), mat.glass, spot * radius, tierY + th(1.2), faceZ + side * 0.026, side > 0 ? 0 : Math.PI);
+      }
+      const faceX = side * (radius * 1.92 * 0.5 + 0.004);
+      const archX = depth * 0.48;
+      kit.add(group, kit.domeGeometry, mat.glass, faceX, tierY, 0, depth * 0.94, radius * 1.9 * 2, 0.02, {
+        ry: side > 0 ? Math.PI / 2 : -Math.PI / 2,
+        outline: false,
+      });
+      kit.rack(group, archX, mat.steel, faceX + side * 0.01, tierY, 0, {
+        ry: side > 0 ? Math.PI / 2 : -Math.PI / 2,
+        outline: false,
+      });
+      for (let ring = 1; ring <= 3; ring += 1) {
+        kit.rack(
+          group,
+          archX * (1 - ring * 0.24),
+          ring % 2 === 0 ? mat.steelDark : mat.steel,
+          faceX + side * (0.014 + ring * 0.004),
+          tierY,
+          0,
+          { ry: side > 0 ? Math.PI / 2 : -Math.PI / 2, outline: false }
+        );
+      }
+      for (const spot of [-0.28, 0.1]) {
+        kit.sailMesh(
+          group,
+          depth * 0.2,
+          th(3.2),
+          mat.glass,
+          faceX + side * 0.026,
+          tierY + th(1.2),
+          spot * depth,
+          side > 0 ? Math.PI / 2 : -Math.PI / 2
+        );
+      }
+    }
+  }
+  const crownTop = crownBase + th(6.6) * (crownSteps - 1) + tw(5.2) + 0.01;
+
+  // 45 m stainless needle.
+  towerNeedle(kit, group, {
+    y: crownTop,
+    height: th(44.9),
+    baseRadius: tw(2.4) / 2,
+    topRadius: tw(0.25) / 2,
+    rings: 1,
+    mat,
+    material: mat.steel,
+  });
+  return group;
+}
+// ---- Burj Khalifa --------------------------------------------------------
+// Three-lobed Y plan, tiers that spiral and shrink, a nearly flat top at
+// 585 m, and then a 243 m needle - the needle is 29% of the total height and
+// must stay almost straight, not become a cone.
+function buildBurjKhalifa(group, { kit, rng, mat }) {
+  const base = 0.06;
+  const podiumHeight = th(40);
+  // Wide three-lobed podium with terraces, pools and a landscaped deck.
+  const podium = new THREE.Group();
+  podium.position.y = base;
+  group.add(podium);
+  kit.cyl(podium, tw(46), podiumHeight, mat.stone, 0, podiumHeight / 2, 0, {
+    segments: 8,
+    ry: Math.PI / 8,
+    outline: true,
+  });
+  for (let index = 0; index < 3; index += 1) {
+    const wing = new THREE.Group();
+    wing.rotation.y = (index / 3) * TAU + Math.PI / 6;
+    podium.add(wing);
+    kit.box(wing, tw(44), podiumHeight, tw(84), mat.stone, 0, podiumHeight / 2, tw(26), { outline: true });
+    kit.box(wing, tw(40), 0.04, tw(80), mat.mullion, 0, podiumHeight + 0.02, tw(26));
+    kit.cyl(wing, tw(11), 0.035, kit.water, 0, podiumHeight + 0.05, tw(58), { segments: 16 });
+    for (const side of [-1, 1]) {
+      addTree(kit, wing, { x: side * tw(16), z: tw(56), scale: 0.55, kind: "palm" });
+      addTree(kit, wing, { x: side * tw(16), z: tw(66), scale: 0.45, kind: "shrub" });
+    }
+    // Recessed glass entrance with a thin canopy.
+    kit.box(wing, tw(22), podiumHeight * 0.42, 0.04, mat.window, 0, podiumHeight * 0.21, tw(68), {
+      outline: false,
+    });
+    kit.box(wing, tw(26), 0.02, tw(8), mat.mullion, 0, podiumHeight * 0.5, tw(72));
+    kit.box(wing, tw(26), 0.012, tw(8), mat.accent, 0, podiumHeight * 0.5 - 0.02, tw(72), {
+      outline: false,
+    });
+  }
+  // Slim Y core rising out of the podium.
+  kit.cyl(podium, tw(34), podiumHeight * 0.4, mat.glass, 0, podiumHeight * 0.8, 0, {
+    segments: 8,
+    ry: Math.PI / 8,
+    outline: false,
+  });
+
+  let y = base + podiumHeight;
+  // Fourteen macro setbacks approximating the real 27-step spiral: the three
+  // wings step back at slightly different heights, so the outline never reads
+  // as a symmetrical wedding cake.
+  const tiers = [
+    { h: 40, w: 58, rotation: 0.0 },
+    { h: 40, w: 56.2, rotation: 0.04 },
+    { h: 40, w: 54.8, rotation: 0.08 },
+    { h: 47, w: 52.8, rotation: 0.12 },
+    { h: 46, w: 49.6, rotation: 0.16 },
+    { h: 47, w: 47.2, rotation: 0.2 },
+    { h: 43, w: 45.2, rotation: 0.24 },
+    { h: 44, w: 41.7, rotation: 0.28 },
+    { h: 43, w: 38.9, rotation: 0.32 },
+    { h: 30, w: 36.4, rotation: 0.36 },
+    { h: 30, w: 33, rotation: 0.4 },
+    { h: 30, w: 30, rotation: 0.43 },
+    { h: 33, w: 27.5, rotation: 0.46 },
+    { h: 32, w: 25.5, rotation: 0.49 },
+  ];
+  tiers.forEach((tier, index) => {
+    const width = tw(tier.w);
+    const height = th(tier.h);
+    burjTier(kit, group, {
+      y,
+      width,
+      height,
+      rotation: tier.rotation,
+      mat,
+      wingLength: mix(0.46, 0.4, index / (tiers.length - 1)),
+      wingWidth: mix(0.32, 0.26, index / (tiers.length - 1)),
+      stagger: index > 6,
+    });
+    // Terrace slab + glowing spire-level marker at each setback.
+    kit.cyl(group, width * 0.32, 0.02, mat.mullion, 0, y + height + 0.01, 0, {
+      segments: 8,
+      ry: Math.PI / 8,
+    });
+    kit.cyl(group, width * 0.33, 0.008, mat.accent, 0, y + height + 0.024, 0, {
+      segments: 8,
+      ry: Math.PI / 8,
+      outline: false,
+    });
+    y += height;
+  });
+
+  // Shoulder steps 585-620 m.
+  const shoulder = th(35);
+  kit.cyl(group, tw(8.4), shoulder, mat.glass, 0, y + shoulder / 2, 0, { segments: 8, ry: Math.PI / 8, outline: true });
+  for (let index = 0; index < 8; index += 1) {
+    const angle = Math.PI / 8 + (index / 8) * TAU;
+    kit.box(group, 0.022, shoulder, 0.022, mat.mullion, Math.cos(angle) * tw(8.3), y + shoulder / 2, Math.sin(angle) * tw(8.3), {
+      outline: false,
+    });
+  }
+  kit.cyl(group, tw(12), 0.03, mat.mullion, 0, y + shoulder + 0.015, 0, { segments: 8, ry: Math.PI / 8 });
+  y += shoulder;
+
+  // 208 m needle: almost untapered, with three aviation platforms.
+  const needleHeight = th(208);
+  towerNeedle(kit, group, {
+    y,
+    height: needleHeight,
+    baseRadius: tw(7) / 2,
+    topRadius: tw(1.6) / 2,
+    rings: 3,
+    mat,
+    material: mat.steel,
+  });
+  for (let index = 0; index < 4; index += 1) {
+    const t = 0.12 + index * 0.2;
+    const radius = (tw(7) / 2) * (1 - t) + 0.01;
+    const finAngle = index * 0.4;
+    kit.box(group, radius * 1.6, 0.02, 0.012, mat.steel, 0, y + needleHeight * t, 0, {
+      ry: finAngle,
+      outline: false,
+    });
+  }
+  return group;
+}
+
+function burjTier(kit, parent, options) {
+  const { y, width, height, rotation, mat, wingLength, wingWidth, stagger = false } = options;
+  const tier = new THREE.Group();
+  tier.position.y = y;
+  tier.rotation.y = rotation;
+  parent.add(tier);
+  // Octagonal core with eight vertical fins.
+  const coreRadius = width * 0.27;
+  kit.cyl(tier, coreRadius, height, mat.glass, 0, height / 2, 0, { segments: 8, ry: Math.PI / 8, outline: true });
+  for (let index = 0; index < 8; index += 1) {
+    const angle = Math.PI / 8 + (index / 8) * TAU;
+    kit.box(tier, 0.026, height, 0.026, mat.mullion, Math.cos(angle) * coreRadius, height / 2, Math.sin(angle) * coreRadius, {
+      outline: false,
+    });
+  }
+  for (let index = 0; index < 3; index += 1) {
+    const wing = new THREE.Group();
+    wing.rotation.y = (index / 3) * TAU + Math.PI / 6;
+    tier.add(wing);
+    const length = width * wingLength * (stagger ? 1 - index * 0.06 : 1);
+    const breadth = width * wingWidth;
+    const distance = width * 0.18 + length / 2;
+    const wingHeight = height * (stagger ? 1 - index * 0.06 : 1);
+    kit.box(wing, breadth, wingHeight, length, mat.glass, 0, wingHeight / 2, distance, { outline: true });
+    kit.box(wing, 0.024, wingHeight, breadth * 0.16, mat.mullion, 0, wingHeight / 2, distance + length * 0.16, {
+      outline: false,
+    });
+    kit.box(wing, breadth * 0.16, wingHeight, 0.024, mat.mullion, 0, wingHeight / 2, distance + length * 0.4, {
+      outline: false,
+    });
+    for (let fin = 0; fin < 7; fin += 1) {
+      const z = distance - length / 2 + (length / 7) * (fin + 0.5);
+      const scale = 1 - Math.abs(fin - 2.5) * 0.05;
+      for (const side of [-1, 1]) {
+        kit.box(wing, 0.02, wingHeight, 0.02, mat.mullion, side * (breadth / 2 + 0.006) * scale, wingHeight / 2, z, {
+          outline: false,
+        });
+      }
+    }
+    // Tubular corner fins at the wing tip (the Burj's silver edges).
+    for (const side of [-1, 1]) {
+      kit.box(wing, 0.032, wingHeight, 0.032, mat.steel, side * (breadth / 2 - 0.02), wingHeight / 2, distance + length / 2, {
+        outline: false,
+      });
+    }
+    // Wing top terrace: a thin balcony ring with a lit edge.
+    kit.box(wing, breadth + 0.05, 0.02, length * 0.9, mat.mullion, 0, wingHeight + 0.01, distance);
+    kit.box(wing, breadth + 0.06, 0.008, length * 0.88, mat.accent, 0, wingHeight + 0.026, distance, { outline: false });
+  }
+}
+
+// ---- Taipei 101 ----------------------------------------------------------
+// Eight bamboo segments that flare outward at each cornice, a near-straight
+// shaft (no cone), then a sudden small tower and a 60 m pin. The double
+// stairstep chamfer is faked with a cross-shaped plan.
+function buildTaipei101(group, { kit, mat }) {
+  const base = 0.06;
+  const podiumHeight = th(35);
+  towerPlaza(kit, group, { span: tw(120), mat, raised: base, hedge: true, lamps: true, trees: 4, fountain: true });
+
+  // Six-storey mall podium, wider than the tower.
+  kit.box(group, tw(96), podiumHeight, tw(96), mat.concrete, 0, base + podiumHeight / 2, 0, { outline: true });
+  for (const side of [-1, 1]) {
+    kit.box(group, tw(80), podiumHeight * 0.3, 0.06, mat.window, 0, base + podiumHeight * 0.15, side * tw(48), {
+      outline: false,
+    });
+    kit.box(group, 0.06, podiumHeight * 0.3, tw(80), mat.window, side * tw(48), base + podiumHeight * 0.15, 0, {
+      outline: false,
+    });
+  }
+  kit.box(group, tw(96) + 0.04, 0.03, tw(96) + 0.04, mat.mullion, 0, base + podiumHeight + 0.015, 0);
+  // Curved ruyi roof impression: inward-sloping eaves on all four sides.
+  for (const side of [-1, 1]) {
+    kit.box(group, tw(100), 0.05, tw(16), mat.mullion, 0, base + podiumHeight + 0.05, side * tw(44), {
+      rx: side * 0.16,
+      outline: false,
+    });
+    kit.box(group, tw(16), 0.05, tw(100), mat.mullion, side * tw(44), base + podiumHeight + 0.05, 0, {
+      rz: -side * 0.16,
+      outline: false,
+    });
+  }
+  kit.box(group, tw(70), 0.06, 0.1, mat.accent, 0, base + podiumHeight * 0.62, tw(49), { outline: false });
+  kit.box(group, tw(34), 0.02, 0.5, mat.mullion, 0, base + podiumHeight * 0.5, tw(50));
+
+  let y = base + podiumHeight;
+  // 35-45 m tower base.
+  taipeiSegment(kit, group, {
+    y,
+    height: th(10),
+    bottom: tw(48),
+    top: tw(48),
+    mat,
+    corners: 8,
+  });
+  y += th(10);
+
+  // Eight 45.1 m segments; each one flares ~6% toward its cornice while the
+  // stack stays nearly straight, exactly like the real "bamboo" profile.
+  const segmentHeight = th(45.1);
+  for (let index = 0; index < 8; index += 1) {
+    const t = index / 7;
+    const bottom = tw(mix(48, 44.6, t));
+    const flare = mix(1.06, 0.995, t);
+    taipeiSegment(kit, group, {
+      y,
+      height: segmentHeight,
+      bottom,
+      top: bottom * flare,
+      mat,
+      corners: 8,
+    });
+    // Cornice: cantilevered eave, ruyi brackets at the corners plus a lit band.
+    const cornice = bottom * flare + 0.1;
+    kit.box(group, cornice, 0.05, cornice, mat.mullion, 0, y + segmentHeight - 0.025, 0);
+    kit.box(group, cornice + 0.02, 0.014, cornice + 0.02, mat.accent, 0, y + segmentHeight - 0.052, 0, {
+      outline: false,
+    });
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        kit.box(group, 0.08, 0.13, 0.08, mat.mullion, (sx * cornice) / 2, y + segmentHeight - 0.06, (sz * cornice) / 2, {
+          outline: false,
+        });
+        kit.box(group, 0.12, 0.03, 0.12, mat.accent, (sx * cornice) / 2, y + segmentHeight - 0.13, (sz * cornice) / 2, {
+          outline: false,
+        });
+      }
+    }
+    y += segmentHeight;
+  }
+
+  // 92-101F small tower (0.62 of the shaft width).
+  const pinHeight = th(42);
+  const pinWidth = tw(29.8);
+  towerCurtain(kit, group, {
+    width: pinWidth,
+    depth: pinWidth,
+    height: pinHeight * 0.6,
+    y0: y,
+    floors: 8,
+    mat,
+    finStep: 0.18,
+    bandEvery: 2,
+    litChance: 0.3,
+  });
+  kit.box(group, pinWidth + 0.08, 0.04, pinWidth + 0.08, mat.mullion, 0, y + pinHeight * 0.6 + 0.02, 0);
+  towerCurtain(kit, group, {
+    width: pinWidth * 0.86,
+    depth: pinWidth * 0.86,
+    height: pinHeight * 0.4,
+    y0: y + pinHeight * 0.6,
+    floors: 4,
+    mat,
+    finStep: 0.18,
+    bandEvery: 1,
+    litChance: 0.34,
+  });
+  y += pinHeight;
+
+  // 60 m pinnacle: platform, stacked stainless rings and a needle.
+  kit.box(group, tw(20), 0.05, tw(20), mat.mullion, 0, y + 0.025, 0);
+  kit.box(group, tw(16), 0.09, tw(16), mat.steel, 0, y + 0.09, 0, { outline: true });
+  kit.box(group, tw(11), 0.2, tw(11), mat.steel, 0, y + 0.23, 0, { outline: true });
+  kit.cyl(group, tw(6.6), 0.07, mat.mullion, 0, y + 0.36, 0, { segments: 16 });
+  kit.cyl(group, tw(5.2), 0.05, mat.accent, 0, y + 0.42, 0, { segments: 16, outline: false });
+  towerNeedle(kit, group, {
+    y: y + 0.36,
+    height: th(42),
+    baseRadius: tw(2.2) / 2,
+    topRadius: tw(0.3) / 2,
+    rings: 2,
+    mat,
+    material: mat.steel,
+  });
+  return group;
+}
+
+function taipeiSegment(kit, parent, options) {
+  const { y, height, bottom, top, mat, corners = 8 } = options;
+  // Subtle outward flare across five thin slabs: the segment reads as one
+  // bamboo node rather than a stack of cantilevered plates.
+  const steps = 5;
+  const stepHeight = height / steps;
+  for (let step = 0; step < steps; step += 1) {
+    const t = (step + 0.5) / steps;
+    const width = mix(bottom, top, t);
+    const slabY = y + stepHeight * (step + 0.5);
+    // Cross-shaped plan = square with double stairstep chamfers.
+    kit.box(parent, width, stepHeight, width * 0.62, mat.glass, 0, slabY, 0, { outline: false });
+    kit.box(parent, width * 0.62, stepHeight, width, mat.glass, 0, slabY, 0, { outline: false });
+    // Horizontal spandrel every step.
+    kit.box(parent, width + 0.014, 0.008, width * 0.62 + 0.014, mat.mullion, 0, slabY + stepHeight / 2, 0, {
+      outline: false,
+    });
+    kit.box(parent, width * 0.62 + 0.014, 0.008, width + 0.014, mat.mullion, 0, slabY + stepHeight / 2, 0, {
+      outline: false,
+    });
+  }
+  // Eight silver mega-columns on the chamfer edges.
+  const mid = mix(bottom, top, 0.5);
+  for (let index = 0; index < corners; index += 1) {
+    const angle = (index / corners) * TAU + Math.PI / 8;
+    const radius = mid * 0.5;
+    kit.box(parent, 0.03, height, 0.03, mat.mullion, Math.cos(angle) * radius, y + height / 2, Math.sin(angle) * radius, {
+      outline: false,
+    });
+  }
+  // Lit window rows.
+  for (let step = 0; step < steps; step += 1) {
+    if (mat.rng() > 0.45) continue;
+    const y0 = y + stepHeight * (step + 0.2);
+    kit.box(parent, mid + 0.004, stepHeight * 0.22, mid * 0.62 + 0.004, mat.window, 0, y0, 0, {
+      outline: false,
+    });
+  }
+}
+
+// ---- Petronas Towers -----------------------------------------------------
+// Two 8-pointed-star shafts that stay almost full width to 60F, shrink in
+// three steps, then break into a stepped crown and short spires. The 170 m
+// double-deck skybridge is the single strongest identifier.
+function buildPetronas(group, { kit, mat }) {
+  const base = 0.06;
+  const towerWidth = tw(56);
+  const gap = tw(58.4);
+  const offset = (towerWidth + gap + towerWidth) / 2 - towerWidth / 2;
+  const parkSpan = tw(240);
+  towerPlaza(kit, group, { span: parkSpan, depth: tw(180), mat, raised: base, hedge: true, lamps: true, trees: 6, fountain: true });
+
+  // Shared six-storey Suria KLCC podium between and under the towers.
+  const podiumHeight = th(30);
+  kit.box(group, towerWidth * 2 + gap + 0.2, podiumHeight, tw(96), mat.stone, 0, base + podiumHeight / 2, 0, {
+    outline: true,
+  });
+  kit.box(group, towerWidth * 2 + gap - 0.1, podiumHeight * 0.5, tw(92), mat.window, 0, base + podiumHeight * 0.3, 0, {
+    outline: false,
+  });
+  kit.box(group, towerWidth * 2 + gap + 0.24, 0.03, tw(96) + 0.04, mat.mullion, 0, base + podiumHeight + 0.015, 0);
+  kit.box(group, towerWidth * 2 + gap + 0.26, 0.012, tw(96) + 0.06, mat.accent, 0, base + podiumHeight + 0.034, 0, {
+    outline: false,
+  });
+  for (const side of [-1, 1]) {
+    kit.box(group, 0.06, podiumHeight, tw(80), mat.window, side * (towerWidth / 2 + gap / 2 + towerWidth * 0.6), base + podiumHeight / 2, 0, {
+      outline: false,
+    });
+  }
+
+  const towerBase = base + podiumHeight;
+  const towerTops = [];
+  for (const side of [-1, 1]) {
+    const tower = new THREE.Group();
+    tower.position.set(side * offset, towerBase, 0);
+    group.add(tower);
+    towerTops.push(buildPetronasTower(kit, tower, { width: towerWidth, mat }));
+  }
+
+  // Skybridge at 170 m (41F/42F), with the two arched legs down to 29F.
+  const bridgeY = base + th(170);
+  const bridgeDepth = tw(16);
+  for (let deck = 0; deck < 2; deck += 1) {
+    const deckY = bridgeY + th(5.2) * deck;
+    kit.box(group, gap + 0.3, 0.07, bridgeDepth, mat.steel, 0, deckY, 0, { outline: true });
+    for (const side of [-1, 1]) {
+      kit.box(group, gap + 0.26, 0.05, 0.026, mat.window, 0, deckY + 0.025, side * (bridgeDepth / 2 - 0.05), {
+        outline: false,
+      });
+      kit.box(group, gap + 0.3, 0.026, 0.026, mat.steel, 0, deckY + 0.085, side * (bridgeDepth / 2 - 0.05), {
+        outline: false,
+      });
+    }
+    kit.box(group, gap + 0.3, 0.016, bridgeDepth - 0.08, mat.accent, 0, deckY + 0.055, 0, { outline: false });
+  }
+  kit.box(group, 0.08, th(10.4), bridgeDepth * 0.9, mat.mullion, 0, bridgeY + th(5.2) / 2 + 0.02, 0);
+  kit.box(group, gap + 0.3, th(10.4), 0.06, mat.steel, 0, bridgeY + th(5.2) / 2 + 0.02, 0, { outline: false });
+  // Two arched legs per tower: they spring from 29F and lean in to the bridge.
+  for (const side of [-1, 1]) {
+    const towerFace = side * (offset - towerWidth / 2 + 0.04);
+    const legTopX = side * offset * 0.45;
+    const legTopY = bridgeY - 0.07;
+    const legBottomY = base + th(105);
+    const dy = legTopY - legBottomY;
+    const dx = legTopX - towerFace;
+    const length = Math.hypot(dx, dy);
+    for (const skew of [-1, 1]) {
+      kit.box(group, 0.06, length, 0.06, mat.steel, towerFace + dx / 2, legBottomY + dy / 2, skew * bridgeDepth * 0.32, {
+        rz: Math.atan2(-dx, dy),
+        outline: false,
+      });
+    }
+  }
+  return group;
+}
+
+function buildPetronasTower(kit, parent, { width, mat }) {
+  const tiers = [
+    { y0: 0, y1: 210, scale: 1 },
+    { y0: 210, y1: 270, scale: 0.94 },
+    { y0: 270, y1: 314, scale: 0.88 },
+    { y0: 314, y1: 345, scale: 0.78 },
+  ];
+  tiers.forEach((tier, index) => {
+    buildPetronasTier(kit, parent, {
+      y: th(tier.y0),
+      height: th(tier.y1 - tier.y0),
+      width: width * tier.scale,
+      mat,
+      bands: 4,
+      index,
+    });
+  });
+  // Stepped stainless crown 375-405 m with ring balconies.
+  let y = th(345);
+  const crownSteps = [
+    { w: 0.68, h: 9 },
+    { w: 0.6, h: 8 },
+    { w: 0.52, h: 7 },
+    { w: 0.42, h: 6 },
+  ];
+  crownSteps.forEach((step) => {
+    const stepRadius = (width * step.w) / 2;
+    const stepHeight = th(step.h);
+    kit.cyl(parent, stepRadius, stepHeight, mat.steel, 0, y + stepHeight / 2, 0, { segments: 8, outline: true });
+    kit.cyl(parent, stepRadius * 1.14, 0.022, mat.mullion, 0, y + stepHeight + 0.011, 0, { segments: 8 });
+    kit.cyl(parent, stepRadius * 1.2, 0.012, mat.accent, 0, y + stepHeight + 0.03, 0, {
+      segments: 8,
+      outline: false,
+    });
+    y += stepHeight;
+  });
+  // 47 m tiered spire.
+  kit.cyl(parent, width * 0.22, 0.05, mat.mullion, 0, y + 0.025, 0, { segments: 16 });
+  let spireY = y + 0.05;
+  const spireSegments = [
+    { r: 0.1, h: 0.32 },
+    { r: 0.07, h: 0.3 },
+    { r: 0.045, h: 0.3 },
+  ];
+  spireSegments.forEach((segment) => {
+    kit.cyl(parent, width * segment.r, segment.h, mat.steel, 0, spireY + segment.h / 2, 0, {
+      segments: 8,
+      outline: true,
+    });
+    kit.cyl(parent, width * segment.r * 1.35, 0.016, mat.accent, 0, spireY + segment.h, 0, {
+      segments: 8,
+      outline: false,
+    });
+    spireY += segment.h;
+  });
+  towerNeedle(kit, parent, {
+    y: spireY,
+    height: 0.22,
+    baseRadius: width * 0.035,
+    topRadius: 0.008,
+    rings: 1,
+    mat,
+    material: mat.steel,
+  });
+  return spireY + 0.22;
+}
+
+function buildPetronasTier(kit, parent, { y, height, width, mat, bands = 4, index = 0 }) {
+  const midY = y + height / 2;
+  // Central octagonal core plus eight star lobes: the Rub el Hizb plan read
+  // as eight vertical ridges, which is Petronas' strongest facade cue.
+  kit.cyl(parent, width * 0.26, height, mat.glass, 0, midY, 0, { segments: 8, ry: Math.PI / 8, outline: true });
+  const lobe = width * 0.26;
+  const distance = width * 0.33;
+  for (let point = 0; point < 8; point += 1) {
+    const angle = (point / 8) * TAU;
+    kit.box(parent, lobe, height, lobe, mat.glass, Math.cos(angle) * distance, midY, Math.sin(angle) * distance, {
+      ry: angle,
+      outline: true,
+    });
+    // Polished stainless ridge along each star point.
+    kit.box(parent, 0.06, height, 0.06, mat.steel, Math.cos(angle) * width * 0.48, midY, Math.sin(angle) * width * 0.48, {
+      outline: false,
+    });
+  }
+  // Horizontal stainless bands.
+  for (let band = 1; band < bands; band += 1) {
+    const bandY = y + (height * band) / bands;
+    kit.cyl(parent, width * 0.265, 0.012, mat.mullion, 0, bandY, 0, { segments: 8, ry: Math.PI / 8, outline: false });
+    for (let point = 0; point < 8; point += 1) {
+      const angle = (point / 8) * TAU;
+      kit.box(parent, lobe + 0.016, 0.012, lobe + 0.016, mat.mullion, Math.cos(angle) * distance, bandY, Math.sin(angle) * distance, {
+        ry: angle,
+        outline: false,
+      });
+    }
+  }
+  // Vertical mullions on the core faces.
+  for (let mullion = 0; mullion < 8; mullion += 1) {
+    const angle = Math.PI / 8 + (mullion / 8) * TAU;
+    kit.box(parent, 0.016, height, 0.016, mat.mullion, Math.cos(angle) * width * 0.29, midY, Math.sin(angle) * width * 0.29, {
+      outline: false,
+    });
+  }
+  if (index < 3) {
+    kit.cyl(parent, width * 0.31, 0.02, mat.steel, 0, y + height + 0.01, 0, { segments: 8, ry: Math.PI / 8 });
+    for (let point = 0; point < 8; point += 1) {
+      const angle = (point / 8) * TAU;
+      kit.box(parent, lobe + 0.05, 0.02, lobe + 0.05, mat.steel, Math.cos(angle) * distance, y + height + 0.01, Math.sin(angle) * distance, {
+        ry: angle,
+      });
+    }
+  }
+}
+
+// ---- One World Trade Center ---------------------------------------------
+// A windowless 57 m podium under a glass body whose square section rotates
+// 45 degrees as it rises (the corners are chamfered away), then a 124 m mast.
+function buildOneWtc(group, { kit, mat }) {
+  const base = 0.06;
+  const podiumHeight = th(57);
+  const side = tw(61);
+  towerPlaza(kit, group, { span: side * 2.4, mat, raised: base, hedge: true, lamps: true, trees: 4 });
+
+  // Solid, windowless podium: matte metal, dense stainless fins, a single
+  // lit entrance and a shadow gap where the glass body begins.
+  kit.box(group, side, podiumHeight * 0.96, side, mat.podium, 0, base + podiumHeight * 0.48, 0, { outline: true });
+  kit.box(group, side * 1.004, podiumHeight * 0.14, side * 1.004, mat.steelDark, 0, base + podiumHeight * 0.07, 0, {
+    outline: false,
+  });
+  kit.box(group, side * 1.01, 0.03, side * 1.01, mat.mullion, 0, base + podiumHeight * 0.97, 0);
+  for (const face of [-1, 1]) {
+    for (let index = 0; index < 12; index += 1) {
+      const offset = -side / 2 + (side / 12) * (index + 0.5);
+      for (const sideSign of [-1, 1]) {
+        kit.box(group, 0.026, podiumHeight * 0.84, 0.03, mat.steel, offset, base + podiumHeight * 0.46, sideSign * (side / 2), {
+          outline: false,
+        });
+        kit.box(group, 0.03, podiumHeight * 0.84, 0.026, mat.steel, sideSign * (side / 2), base + podiumHeight * 0.46, offset, {
+          outline: false,
+        });
+      }
+    }
+  }
+  kit.box(group, side * 0.5, podiumHeight * 0.34, 0.04, mat.window, 0, base + podiumHeight * 0.3, side / 2 + 0.01, {
+    outline: false,
+  });
+  kit.box(group, side * 0.56, 0.025, 0.5, mat.mullion, 0, base + podiumHeight * 0.46, side / 2 + 0.24);
+
+  // Glazed body: fourteen rings that walk the square section around 45°.
+  const bodyHeight = th(360);
+  const rings = 14;
+  const ringHeight = bodyHeight / rings;
+  let y = base + podiumHeight;
+  for (let index = 0; index < rings; index += 1) {
+    const t = index / (rings - 1);
+    const width = mix(side * 0.97, tw(39), t);
+    const rotation = (Math.PI / 4) * t;
+    oneWtcRing(kit, group, { y, height: ringHeight, width, rotation, mat });
+    y += ringHeight;
+  }
+
+  // Parapet at 417 m: a square platform rotated 45° with a railed edge.
+  kit.box(group, tw(43), 0.03, tw(43), mat.mullion, 0, y + 0.015, 0, { ry: Math.PI / 4 });
+  towerRailing(kit, group, { width: tw(43), depth: tw(43), y: y + 0.03, mat, height: 0.06 });
+  kit.box(group, tw(30), 0.1, tw(30), mat.glassSoft, 0, y + 0.09, 0, {
+    ry: Math.PI / 4,
+    outline: true,
+  });
+  // 124 m communications mast with a visible ring platform.
+  kit.cyl(group, tw(6), 0.05, mat.steel, 0, y + 0.14, 0, { segments: 16, outline: true });
+  kit.cyl(group, tw(4.6), 0.16, mat.steel, 0, y + 0.24, 0, { segments: 8, outline: true });
+  towerNeedle(kit, group, {
+    y: y + 0.32,
+    height: th(124.3),
+    baseRadius: tw(4.2) / 2,
+    topRadius: tw(0.4) / 2,
+    rings: 4,
+    mat,
+    material: mat.steel,
+  });
+  return group;
+}
+
+function oneWtcRing(kit, parent, { y, height, width, rotation, mat }) {
+  const group = new THREE.Group();
+  group.position.y = y;
+  group.rotation.y = rotation;
+  parent.add(group);
+  kit.box(group, width, height, width, mat.glass, 0, height / 2, 0, { outline: true });
+  // Vertical mullions and the four corner arris blades.
+  for (let index = 0; index < 4; index += 1) {
+    const offset = -width / 2 + (width / 4) * (index + 0.5);
+    for (const side of [-1, 1]) {
+      kit.box(group, 0.016, height, 0.018, mat.mullion, offset, height / 2, side * (width / 2 + 0.004), {
+        outline: false,
+      });
+      kit.box(group, 0.018, height, 0.016, mat.mullion, side * (width / 2 + 0.004), height / 2, offset, {
+        outline: false,
+      });
+    }
+  }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      kit.box(group, 0.03, height + 0.01, 0.03, mat.steel, (sx * width) / 2, height / 2, (sz * width) / 2, {
+        outline: false,
+      });
+    }
+  }
+  kit.box(group, width + 0.014, 0.01, width + 0.014, mat.mullion, 0, height, 0, { outline: false });
+}
+// ---- Original portfolio towers -----------------------------------------
+// These six towers have no real-world twins; they keep their catalogue
+// identity but are rebuilt with the same measured grammar as the landmarks:
+// a clear lobby, a readable shaft rhythm, a distinct crown and a spire ratio.
+
+// TWIN CREST: a tall and a short glass tower on a shared podium, linked by a
+// double-deck skybridge roughly 55% up the shorter tower.
+function buildTwinCrest(group, { kit, mat, model }) {
+  const base = 0.06;
+  const total = th((model.tall[0] + model.tall[1]) / 2);
+  const towerWidth = tw(34);
+  const towerDepth = tw(30);
+  const gap = towerWidth * 0.5;
+  const offset = (towerWidth + gap) / 2;
+  const heights = [total, total * 0.84];
+  towerPlaza(kit, group, { span: (towerWidth * 2 + gap) * 1.5, mat, raised: base, trees: 3, fountain: true });
+
+  const podiumHeight = th(26);
+  kit.box(group, towerWidth * 2 + gap + 0.3, podiumHeight, towerDepth * 1.5, mat.stone, 0, base + podiumHeight / 2, 0, {
+    outline: true,
+  });
+  kit.box(group, towerWidth * 2 + gap + 0.2, podiumHeight * 0.42, towerDepth * 1.44, mat.window, 0, base + podiumHeight * 0.24, 0, {
+    outline: false,
+  });
+  kit.box(group, towerWidth * 2 + gap + 0.34, 0.03, towerDepth * 1.54, mat.mullion, 0, base + podiumHeight + 0.015, 0);
+  kit.box(group, towerWidth * 2 + gap + 0.36, 0.012, towerDepth * 1.56, mat.accent, 0, base + podiumHeight + 0.034, 0, {
+    outline: false,
+  });
+  const podiumTop = base + podiumHeight;
+
+  for (let index = 0; index < 2; index += 1) {
+    const tower = new THREE.Group();
+    tower.position.set((index === 0 ? -1 : 1) * offset, podiumTop, 0);
+    group.add(tower);
+    const height = heights[index];
+    towerCurtain(kit, tower, {
+      width: towerWidth,
+      depth: towerDepth,
+      height,
+      y0: 0,
+      floors: Math.max(10, Math.round(height / th(3.6))),
+      mat,
+      finStep: 0.2,
+      bandEvery: 2,
+      litChance: 0.3,
+    });
+    // Crown: glass lantern on the tall tower, open roof on the short one.
+    const crownHeight = index === 0 ? th(24) : th(12);
+    towerCurtain(kit, tower, {
+      width: towerWidth * 0.82,
+      depth: towerDepth * 0.82,
+      height: crownHeight,
+      y0: height,
+      floors: 4,
+      mat,
+      finStep: 0.16,
+      bandEvery: 1,
+      litChance: 0.5,
+    });
+    kit.box(tower, towerWidth * 0.88, 0.03, towerDepth * 0.88, mat.mullion, 0, height + crownHeight + 0.015, 0);
+    kit.box(tower, towerWidth * 0.86, 0.012, towerDepth * 0.86, mat.accent, 0, height + crownHeight + 0.036, 0, {
+      outline: false,
+    });
+    if (index === 0) {
+      towerNeedle(kit, tower, {
+        y: height + crownHeight + 0.04,
+        height: th(40),
+        baseRadius: tw(2.6) / 2,
+        topRadius: 0.012,
+        rings: 2,
+        mat,
+      });
+    } else {
+      towerRoofDeck(kit, tower, { width: towerWidth * 0.82, depth: towerDepth * 0.82, y: height + crownHeight, mat });
+    }
+  }
+
+  // Double-deck bridge plus two slanted legs.
+  const bridgeY = podiumTop + Math.min(...heights) * 0.56;
+  for (let deck = 0; deck < 2; deck += 1) {
+    const deckY = bridgeY + th(4.6) * deck;
+    kit.box(group, gap + 0.16, 0.05, towerDepth * 0.42, mat.mullion, 0, deckY, 0, { outline: true });
+    kit.box(group, gap + 0.12, 0.03, towerDepth * 0.36, mat.window, 0, deckY + 0.01, 0, { outline: false });
+  }
+  for (const side of [-1, 1]) {
+    kit.box(group, 0.045, th(9.2), towerDepth * 0.4, mat.mullion, 0, bridgeY + th(4.6) / 2, side * towerDepth * 0.18, {
+      outline: false,
+    });
+  }
+  kit.box(group, gap + 0.16, 0.06, 0.05, mat.accent, 0, bridgeY + 0.06, 0, { outline: false });
+  return group;
+}
+
+// CLOUDSPIRE: two stone setbacks under a glowing lantern and a long spire.
+function buildCloudspire(group, { kit, mat, model }) {
+  const base = 0.06;
+  const total = th((model.tall[0] + model.tall[1]) / 2);
+  const plan = model.plan ?? [50, 46];
+  const shaft = tw(plan[0]);
+  const depth = tw(plan[1]);
+  towerPlaza(kit, group, { span: tw(120), mat, raised: base, trees: 4, hedge: true });
+
+  const lobbyTop = towerLobby(kit, group, {
+    width: shaft * 1.1,
+    depth: depth * 1.1,
+    height: th(12),
+    mat,
+    stone: true,
+  });
+  const tiers = [
+    { scale: 1, share: 0.52 },
+    { scale: 0.87, share: 0.27 },
+    { scale: 0.74, share: 0.13 },
+  ];
+  let y = lobbyTop;
+  let width = shaft;
+  let tierDepth = depth;
+  tiers.forEach((tier, index) => {
+    const tierHeight = total * tier.share;
+    width = shaft * tier.scale;
+    tierDepth = depth * tier.scale;
+    towerCurtain(kit, group, {
+      width,
+      depth: tierDepth,
+      height: tierHeight,
+      y0: y,
+      floors: Math.max(8, Math.round(tierHeight / th(3))),
+      mat,
+      finStep: 0.17,
+      bandEvery: 2,
+      litChance: 0.26,
+    });
+    // Stone corner piers keep the tower grounded against the glass.
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        kit.box(group, 0.07, tierHeight, 0.07, mat.stone, (sx * width) / 2, y + tierHeight / 2, (sz * tierDepth) / 2, {
+          outline: false,
+        });
+      }
+    }
+    kit.box(group, width + 0.1, 0.035, tierDepth + 0.1, mat.stone, 0, y + tierHeight + 0.017, 0);
+    kit.box(group, width + 0.12, 0.014, tierDepth + 0.12, mat.accent, 0, y + tierHeight + 0.042, 0, {
+      outline: false,
+    });
+    y += tierHeight + 0.05;
+  });
+
+  // Glowing lantern crown with vertical ribs, then the spire.
+  const lanternHeight = th(34);
+  towerCurtain(kit, group, {
+    width: width * 0.82,
+    depth: tierDepth * 0.82,
+    height: lanternHeight,
+    y0: y,
+    floors: 6,
+    mat,
+    finStep: 0.14,
+    bandEvery: 1,
+    litChance: 0.8,
+    glassMaterial: mat.window,
+  });
+  for (let index = 0; index < 8; index += 1) {
+    const angle = (index / 8) * TAU;
+    kit.box(group, 0.026, lanternHeight, 0.026, mat.mullion, Math.cos(angle) * width * 0.41, y + lanternHeight / 2, Math.sin(angle) * tierDepth * 0.41, {
+      outline: false,
+    });
+  }
+  kit.box(group, width * 0.9, 0.03, tierDepth * 0.9, mat.mullion, 0, y + lanternHeight + 0.015, 0);
+  kit.box(group, width * 0.88, 0.014, tierDepth * 0.88, mat.accent, 0, y + lanternHeight + 0.036, 0, {
+    outline: false,
+  });
+  towerNeedle(kit, group, {
+    y: y + lanternHeight + 0.04,
+    height: th(56),
+    baseRadius: tw(3.2) / 2,
+    topRadius: 0.01,
+    rings: 2,
+    mat,
+    material: mat.steel,
+  });
+  return group;
+}
+
+// OBSIDIAN: dark glass shaft inside a white megaframe with X bracing.
+function buildObsidian(group, { kit, mat, model }) {
+  const base = 0.06;
+  const total = th((model.tall[0] + model.tall[1]) / 2);
+  const plan = model.plan ?? [52, 48];
+  const width = tw(plan[0]);
+  const depth = tw(plan[1]);
+  towerPlaza(kit, group, { span: tw(124), mat, raised: base, trees: 3, hedge: false });
+
+  const lobbyTop = towerLobby(kit, group, {
+    width: width * 1.08,
+    depth: depth * 1.08,
+    height: th(14),
+    mat,
+    stone: true,
+  });
+  const bodyHeight = total - lobbyTop;
+  const darkGlass = kit.material("#2c3742", { roughness: 0.14, metalness: 0.6 });
+  towerCurtain(kit, group, {
+    width,
+    depth,
+    height: bodyHeight,
+    y0: lobbyTop,
+    floors: Math.max(12, Math.round(bodyHeight / th(3))),
+    mat,
+    finStep: 0.24,
+    bandEvery: 2,
+    litChance: 0.2,
+    glassMaterial: darkGlass,
+    cornerBlades: false,
+  });
+
+  // Four white corner mega-columns.
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      kit.box(group, 0.1, bodyHeight, 0.1, mat.mullion, (sx * width) / 2, lobbyTop + bodyHeight / 2, (sz * depth) / 2, {
+        outline: true,
+      });
+    }
+  }
+  // Two X-braces per facade, in five vertical bays.
+  const bays = 5;
+  const bayHeight = bodyHeight / bays;
+  for (let bay = 0; bay < bays - 1; bay += 1) {
+    const y0 = lobbyTop + bayHeight * (bay + 0.5);
+    const diagLength = Math.hypot(width * 0.98, bayHeight);
+    for (const side of [-1, 1]) {
+      kit.box(group, diagLength, 0.03, 0.03, mat.mullion, 0, y0 + bayHeight / 2, side * (depth / 2 + 0.04), {
+        rz: (((bay + side) % 2 === 0 ? 1 : -1) * Math.atan2(bayHeight, width * 0.98)),
+        outline: false,
+      });
+      kit.box(group, 0.03, 0.03, diagLength, mat.mullion, side * (width / 2 + 0.04), y0 + bayHeight / 2, 0, {
+        rx: (((bay + side) % 2 === 0 ? 1 : -1) * Math.atan2(bayHeight, depth * 0.98)),
+        outline: false,
+      });
+    }
+    for (const side of [-1, 1]) {
+      kit.box(group, width + 0.1, 0.035, 0.06, mat.mullion, 0, y0, side * (depth / 2 + 0.02), { outline: false });
+    }
+  }
+
+  // Dark lantern crown with a gold ring and a slim antenna.
+  const crownHeight = th(30);
+  towerCurtain(kit, group, {
+    width: width * 0.8,
+    depth: depth * 0.8,
+    height: crownHeight,
+    y0: lobbyTop + bodyHeight,
+    floors: 5,
+    mat,
+    finStep: 0.15,
+    bandEvery: 1,
+    litChance: 0.7,
+    glassMaterial: mat.window,
+  });
+  kit.box(group, width * 0.88, 0.03, depth * 0.88, mat.dark, 0, lobbyTop + bodyHeight + crownHeight + 0.015, 0);
+  kit.box(group, width * 0.86, 0.014, depth * 0.86, mat.accent, 0, lobbyTop + bodyHeight + crownHeight + 0.036, 0, {
+    outline: false,
+  });
+  towerNeedle(kit, group, {
+    y: lobbyTop + bodyHeight + crownHeight + 0.04,
+    height: th(34),
+    baseRadius: tw(2) / 2,
+    topRadius: 0.01,
+    rings: 1,
+    mat,
+  });
+  return group;
+}
+
+// SKY TERRACE: a glass core wrapped in staggered planted terraces.
+function buildSkyTerrace(group, { kit, mat, model }) {
+  const base = 0.06;
+  const total = th((model.tall[0] + model.tall[1]) / 2);
+  const plan = model.plan ?? [54, 48];
+  const width = tw(plan[0]) * 0.74;
+  const depth = tw(plan[1]) * 0.74;
+  towerPlaza(kit, group, { span: tw(130), mat, raised: base, trees: 4, hedge: true });
+
+  const lobbyTop = towerLobby(kit, group, {
+    width: width * 1.34,
+    depth: depth * 1.34,
+    height: th(10),
+    mat,
+    stone: true,
+  });
+  const bodyHeight = total - lobbyTop;
+  towerCurtain(kit, group, {
+    width,
+    depth,
+    height: bodyHeight,
+    y0: lobbyTop,
+    floors: Math.max(12, Math.round(bodyHeight / th(3))),
+    mat,
+    finStep: 0.2,
+    bandEvery: 2,
+    litChance: 0.28,
+  });
+
+  const levels = 7;
+  for (let level = 1; level <= levels; level += 1) {
+    const y = lobbyTop + (bodyHeight * level) / (levels + 1);
+    const side = level % 4;
+    const terrace = new THREE.Group();
+    terrace.position.y = y;
+    group.add(terrace);
+    const out = 0.34;
+    if (side === 0) {
+      kit.box(terrace, width + out, 0.04, depth * 0.8, mat.mullion, out / 2, 0, 0);
+      kit.box(terrace, width + out * 0.8, 0.03, depth * 0.68, mat.planter, out / 2, 0.034, 0);
+      addBush(kit, terrace, width * 0.24, 0, 0.42, "#6e9452");
+      addBush(kit, terrace, width * 0.38, 0, 0.34, "#82a45d");
+      addTree(kit, terrace, { x: width * 0.06, z: 0, scale: 0.3, kind: "shrub", leaf: "#7db265" });
+    } else if (side === 1) {
+      kit.box(terrace, width * 0.8, 0.04, depth + out, mat.mullion, 0, 0, out / 2);
+      kit.box(terrace, width * 0.68, 0.03, depth + out * 0.8, mat.planter, 0, 0.034, out / 2);
+      addBush(kit, terrace, 0, depth * 0.24, 0.42, "#6e9452");
+      addBush(kit, terrace, 0, depth * 0.38, 0.34, "#82a45d");
+    } else if (side === 2) {
+      kit.box(terrace, width + out, 0.04, depth * 0.8, mat.mullion, -out / 2, 0, 0);
+      kit.box(terrace, width + out * 0.8, 0.03, depth * 0.68, mat.planter, -out / 2, 0.034, 0);
+      addBush(kit, terrace, -width * 0.24, 0, 0.42, "#6e9452");
+      addBush(kit, terrace, -width * 0.38, 0, 0.34, "#82a45d");
+    } else {
+      kit.box(terrace, width * 0.8, 0.04, depth + out, mat.mullion, 0, 0, -out / 2);
+      kit.box(terrace, width * 0.68, 0.03, depth + out * 0.8, mat.planter, 0, 0.034, -out / 2);
+      addBush(kit, terrace, 0, -depth * 0.24, 0.42, "#6e9452");
+      addBush(kit, terrace, 0, -depth * 0.38, 0.34, "#82a45d");
+    }
+  }
+
+  // Roof garden: plants sit in a group lifted to the roof deck.
+  const roofY = lobbyTop + bodyHeight;
+  kit.box(group, width + 0.16, 0.05, depth + 0.16, mat.mullion, 0, roofY + 0.025, 0);
+  kit.box(group, width + 0.1, 0.04, depth + 0.1, mat.planter, 0, roofY + 0.07, 0);
+  const roofGarden = new THREE.Group();
+  roofGarden.position.y = roofY + 0.08;
+  group.add(roofGarden);
+  addBush(kit, roofGarden, width * 0.3, depth * 0.2, 0.5, "#6e9452");
+  addBush(kit, roofGarden, -width * 0.28, -depth * 0.14, 0.44, "#82a45d");
+  addTree(kit, roofGarden, { x: 0, z: 0, scale: 0.36, kind: "broadleaf", leaf: "#7db265" });
+  kit.ico(group, 0.028, kit.glow("#ff8178"), width * 0.36, roofY + 0.24, -depth * 0.28);
+  return group;
+}
+
+// HELIX: floor plates that rotate as they stack, with a low glass crown.
+function buildHelix(group, { kit, mat, model }) {
+  const base = 0.06;
+  const total = th((model.tall[0] + model.tall[1]) / 2);
+  const plan = model.plan ?? [48, 48];
+  const width = tw(plan[0]);
+  const depth = tw(plan[1]);
+  towerPlaza(kit, group, { span: tw(118), round: true, mat, raised: base, trees: 3, fountain: true });
+
+  const lobbyTop = towerLobby(kit, group, {
+    width: width * 1.08,
+    depth: depth * 1.08,
+    height: th(12),
+    mat,
+    stone: true,
+  });
+  const bodyHeight = total - lobbyTop - th(30);
+  const segments = 26;
+  const segmentHeight = bodyHeight / segments;
+  let previousRotation = 0;
+  for (let index = 0; index < segments; index += 1) {
+    const t = index / (segments - 1);
+    const scale = mix(1, 0.86, t);
+    const rotation = t * 1.28;
+    const segment = new THREE.Group();
+    segment.position.y = lobbyTop + segmentHeight * (index + 0.5);
+    segment.rotation.y = rotation;
+    group.add(segment);
+    const segmentWidth = width * scale;
+    const segmentDepth = depth * scale;
+    kit.box(segment, segmentWidth, segmentHeight * 1.012, segmentDepth, mat.glass, 0, 0, 0, { outline: true });
+    kit.box(segment, segmentWidth + 0.03, 0.014, segmentDepth + 0.03, mat.mullion, 0, segmentHeight / 2, 0, {
+      outline: false,
+    });
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        kit.box(segment, 0.05, segmentHeight * 1.01, 0.05, mat.mullion, (sx * segmentWidth) / 2, 0, (sz * segmentDepth) / 2, {
+          outline: false,
+        });
+      }
+    }
+    if (index % 5 === 0) {
+      kit.box(segment, segmentWidth + 0.012, segmentHeight * 0.3, segmentDepth + 0.012, mat.accent, 0, 0, 0, {
+        outline: false,
+      });
+    }
+    previousRotation = rotation;
+  }
+
+  // Glass crown follows the final rotation, then a short spire.
+  const crownY = lobbyTop + bodyHeight;
+  const crown = new THREE.Group();
+  crown.position.y = crownY;
+  crown.rotation.y = previousRotation;
+  group.add(crown);
+  const crownHeight = th(22);
+  kit.box(crown, width * 0.78, crownHeight, depth * 0.78, mat.glassSoft, 0, crownHeight / 2, 0, { outline: true });
+  for (let index = 0; index < 6; index += 1) {
+    const angle = (index / 6) * TAU;
+    kit.box(crown, 0.026, crownHeight, 0.026, mat.mullion, Math.cos(angle) * width * 0.39, crownHeight / 2, Math.sin(angle) * depth * 0.39, {
+      outline: false,
+    });
+  }
+  kit.box(crown, width * 0.82, 0.03, depth * 0.82, mat.mullion, 0, crownHeight + 0.015, 0);
+  kit.box(crown, width * 0.8, 0.014, depth * 0.8, mat.accent, 0, crownHeight + 0.036, 0, { outline: false });
+  towerNeedle(kit, crown, {
+    y: crownHeight + 0.04,
+    height: th(30),
+    baseRadius: tw(2.4) / 2,
+    topRadius: 0.01,
+    rings: 1,
+    mat,
+  });
+  return group;
+}
+
+// PIXEL APEX: octagonal landmark with an observation ring and lantern.
+function buildPixelApex(group, { kit, mat, model }) {
+  const base = 0.06;
+  const total = th((model.tall[0] + model.tall[1]) / 2);
+  const plan = model.plan ?? [56, 56];
+  const shaft = tw(plan[0]);
+  towerPlaza(kit, group, { span: tw(150), mat, raised: base, trees: 5, hedge: true, fountain: true });
+
+  const lobbyTop = towerLobby(kit, group, {
+    width: shaft * 1.16,
+    depth: shaft * 1.16,
+    height: th(16),
+    mat,
+    stone: true,
+  });
+  const tiers = [
+    { scale: 1, share: 0.34 },
+    { scale: 0.91, share: 0.27 },
+    { scale: 0.82, share: 0.21 },
+    { scale: 0.72, share: 0.13 },
+  ];
+  let y = lobbyTop;
+  let tierWidth = shaft;
+  tiers.forEach((tier, index) => {
+    const tierHeight = total * tier.share;
+    tierWidth = shaft * tier.scale;
+    octagonShaft(kit, group, {
+      width: tierWidth,
+      height: tierHeight,
+      y0: y,
+      floors: Math.max(8, Math.round(tierHeight / th(3))),
+      mat,
+    });
+    kit.cyl(group, tierWidth * 0.5 + 0.05, 0.04, mat.mullion, 0, y + tierHeight + 0.02, 0, {
+      segments: 8,
+      ry: Math.PI / 8,
+    });
+    kit.cyl(group, tierWidth * 0.5 + 0.07, 0.014, mat.accent, 0, y + tierHeight + 0.048, 0, {
+      segments: 8,
+      ry: Math.PI / 8,
+      outline: false,
+    });
+    if (index === 2) {
+      // Observation ring: a wider open gallery around the octagon.
+      const ringRadius = tierWidth * 0.66;
+      kit.cyl(group, ringRadius, 0.05, mat.mullion, 0, y + tierHeight - th(8), 0, {
+        segments: 16,
+        outline: true,
+      });
+      kit.cyl(group, ringRadius * 0.94, 0.02, mat.paving, 0, y + tierHeight - th(8) + 0.035, 0, {
+        segments: 16,
+      });
+      for (let post = 0; post < 12; post += 1) {
+        const angle = (post / 12) * TAU;
+        kit.box(group, 0.012, 0.09, 0.012, mat.mullion, Math.cos(angle) * ringRadius, y + tierHeight - th(8) + 0.09, Math.sin(angle) * ringRadius, {
+          outline: false,
+        });
+      }
+      kit.cyl(group, ringRadius, 0.012, mat.mullion, 0, y + tierHeight - th(8) + 0.14, 0, {
+        segments: 16,
+        outline: false,
+      });
+    }
+    y += tierHeight + 0.04;
+  });
+
+  // Lantern crown with glowing ribs, then the mast.
+  const lanternHeight = th(46);
+  const lanternWidth = tierWidth * 0.88;
+  towerCurtain(kit, group, {
+    width: lanternWidth,
+    depth: lanternWidth,
+    height: lanternHeight,
+    y0: y,
+    floors: 8,
+    mat,
+    finStep: 0.14,
+    bandEvery: 1,
+    litChance: 0.85,
+    glassMaterial: mat.window,
+  });
+  for (let index = 0; index < 8; index += 1) {
+    const angle = Math.PI / 8 + (index / 8) * TAU;
+    kit.box(group, 0.03, lanternHeight, 0.03, mat.accent, Math.cos(angle) * lanternWidth * 0.5, y + lanternHeight / 2, Math.sin(angle) * lanternWidth * 0.5, {
+      outline: false,
+    });
+  }
+  kit.box(group, lanternWidth + 0.06, 0.03, lanternWidth + 0.06, mat.mullion, 0, y + lanternHeight + 0.015, 0);
+  kit.box(group, lanternWidth + 0.08, 0.014, lanternWidth + 0.08, mat.accent, 0, y + lanternHeight + 0.036, 0, {
+    outline: false,
+  });
+  towerNeedle(kit, group, {
+    y: y + lanternHeight + 0.04,
+    height: th(70),
+    baseRadius: tw(4) / 2,
+    topRadius: 0.01,
+    rings: 3,
+    mat,
+    material: mat.steel,
+  });
+  return group;
+}
+
+function octagonShaft(kit, parent, { width, height, y0, floors, mat }) {
+  const midY = y0 + height / 2;
+  kit.cyl(parent, width * 0.5, height, mat.glass, 0, midY, 0, { segments: 8, ry: Math.PI / 8, outline: true });
+  for (let index = 0; index < 8; index += 1) {
+    const angle = Math.PI / 8 + (index / 8) * TAU;
+    kit.box(parent, 0.032, height, 0.032, mat.mullion, Math.cos(angle) * width * 0.49, midY, Math.sin(angle) * width * 0.49, {
+      ry: -angle,
+      outline: false,
+    });
+  }
+  const floorCount = Math.max(3, Math.round(floors));
+  for (let floor = 2; floor < floorCount; floor += 2) {
+    kit.cyl(parent, width * 0.5 + 0.008, 0.01, mat.mullion, 0, y0 + (floor * height) / floorCount, 0, {
+      segments: 8,
+      ry: Math.PI / 8,
+      outline: false,
+    });
+  }
+  for (let floor = 0; floor < floorCount; floor += 1) {
+    if (mat.rng() > 0.24) continue;
+    kit.cyl(parent, width * 0.5 + 0.004, (height / floorCount) * 0.36, mat.window, 0, y0 + ((floor + 0.5) * height) / floorCount, 0, {
+      segments: 8,
+      ry: Math.PI / 8,
+      outline: false,
+    });
+  }
+}
+
+const TOWER_BUILDERS = {
+  wtc: buildTradeTwins,
+  deco: buildEmpireState,
+  chrysler: buildChrysler,
+  tiered: buildBurjKhalifa,
+  pagoda: buildTaipei101,
+  petronas: buildPetronas,
+  onewtc: buildOneWtc,
+  twinbridge: buildTwinCrest,
+  pinnacle: buildCloudspire,
+  facet: buildObsidian,
+  terrace: buildSkyTerrace,
+  twist: buildHelix,
+  lantern: buildPixelApex,
+};
 
 function buildSkyscraper(asset, kit, rng) {
   const model = asset.model;
+  const style = model.style ?? "pinnacle";
+  const build = TOWER_BUILDERS[style] ?? buildCloudspire;
   const group = new THREE.Group();
-  const outer = new THREE.Group();
-  group.add(outer);
-
-  const span = Math.max(model.width[1], model.depth[1]);
-  const base = span * (model.plinthScale ?? 1.32) + 0.2;
-  kit.mass(group, {
-    width: base,
-    height: 0.08,
-    depth: base,
-    material: kit.stone,
-    y: 0,
-    outline: true,
-  });
-  kit.box(group, base * 0.82, 0.05, base * 0.82, kit.trim, 0, 0.105, 0);
-  kit.box(group, base * 0.36, 0.034, 0.2, kit.trim, 0, 0.14, base * 0.43);
-  kit.box(group, base * 0.28, 0.034, 0.16, kit.trim, 0, 0.175, base * 0.48);
-
-  const treePositions = [
-    [-base * 0.38, -base * 0.36],
-    [base * 0.38, -base * 0.36],
-    [-base * 0.38, base * 0.36],
-    [base * 0.38, base * 0.34],
-  ];
-  treePositions.forEach(([x, z], index) => {
-    if (index === 3) {
-      kit.box(group, 0.36, 0.14, 0.22, kit.material("#8e846d"), x, 0.12, z, { outline: true });
-      addBush(kit, group, x, z, 0.55, "#6e9452");
-    } else {
-      addTree(kit, group, {
-        x,
-        z,
-        scale: 0.45,
-        kind: index === 1 ? "palm" : "broadleaf",
-        leaf: index === 1 ? "#7ca653" : "#6b9b53",
-      });
-    }
-  });
-  for (let light = 0; light < 8; light += 1) {
-    const angle = (light / 8) * TAU;
-    kit.ico(
-      group,
-      0.02,
-      kit.glow("#ffd28a"),
-      Math.cos(angle) * base * 0.46,
-      0.13,
-      Math.sin(angle) * base * 0.46
-    );
-  }
-
-  const building = buildBuilding(asset, kit, rng);
-  building.position.y = 0.12;
-  outer.add(building);
-
-  kit.box(group, 0.16, 0.5, 0.04, kit.material("#28333b"), 0, 0.26, base * 0.45);
-  kit.box(group, 0.13, 0.2, 0.02, kit.glow("#ffd166"), 0, 0.29, base * 0.47);
+  build(group, { asset, kit, rng, model, mat: towerMaterials(kit, rng, model) });
   return group;
 }
 

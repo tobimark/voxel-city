@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createCity, randomCitySeed } from "./city.js";
 import { sampleEnvironment, getPhase } from "./environment.js";
+import { createMiniatureEffect } from "./miniature.js";
 
 const canvas = document.querySelector("#scene");
 const app = document.querySelector("#app");
@@ -52,6 +53,8 @@ const dom = {
   copyLinkBtn: document.querySelector("#copyLinkBtn"),
   projectionBtn: document.querySelector("#projectionBtn"),
   projectionLabel: document.querySelector("#projectionLabel"),
+  miniatureBtn: document.querySelector("#miniatureBtn"),
+  miniatureLabel: document.querySelector("#miniatureLabel"),
   toast: document.querySelector("#toast"),
 };
 
@@ -102,6 +105,11 @@ function readProjection() {
   }
 }
 
+function readMiniature() {
+  const raw = new URLSearchParams(window.location.search).get("miniature");
+  return raw === "1" || raw === "true";
+}
+
 function readHourFromLocation() {
   const raw = new URLSearchParams(window.location.search).get("hour");
   if (raw == null) return 15.2;
@@ -117,6 +125,7 @@ const state = {
   paused: false,
   seed: initialStateSeed,
   projection: readProjection(),
+  miniature: readMiniature(),
   selected: null,
   booted: false,
   bootStartedAt: performance.now(),
@@ -447,8 +456,14 @@ if (renderer) {
   }
 
   sizeRenderer();
+
+  const miniature = createMiniatureEffect(renderer, scene, camera);
+  miniature.setSize(renderer.domElement.width, renderer.domElement.height);
+  updateMiniatureUI();
+
   window.addEventListener("resize", () => {
     sizeRenderer();
+    miniature.setSize(renderer.domElement.width, renderer.domElement.height);
     controls.update();
   });
 
@@ -542,6 +557,25 @@ if (renderer) {
       );
       dom.projectionBtn.title = isPerspective ? "当前透视，点击切换等轴" : "当前等轴，点击切换透视";
     }
+  }
+
+  function updateMiniatureUI() {
+    if (!dom.miniatureBtn) return;
+    dom.miniatureBtn.setAttribute("aria-pressed", String(state.miniature));
+    dom.miniatureBtn.setAttribute(
+      "aria-label",
+      state.miniature ? "关闭微缩摄影效果" : "开启微缩摄影效果"
+    );
+    dom.miniatureBtn.title = state.miniature ? "微缩摄影已开启 (M)" : "微缩摄影效果 (M)";
+  }
+
+  function setMiniature(enabled, { announce = true } = {}) {
+    state.miniature = Boolean(enabled);
+    updateMiniatureUI();
+    if (announce) {
+      showToast(state.miniature ? "微缩摄影已开启 · 按 M 关闭" : "微缩摄影已关闭", 1800);
+    }
+    resetAutoRotate();
   }
 
   function shareUrl(seed) {
@@ -834,6 +868,9 @@ if (renderer) {
   dom.projectionBtn?.addEventListener("click", () => {
     setProjection(state.projection === "persp" ? "ortho" : "persp", { announce: true });
   });
+  dom.miniatureBtn?.addEventListener("click", () => {
+    setMiniature(!state.miniature);
+  });
   dom.closeInfoBtn.addEventListener("click", clearSelection);
 
   dom.seedBtn?.addEventListener("click", () => {
@@ -891,6 +928,8 @@ if (renderer) {
       spawnCity(randomCitySeed(), true);
     } else if (event.key.toLowerCase() === "c") {
       resetView();
+    } else if (event.key.toLowerCase() === "m") {
+      setMiniature(!state.miniature);
     } else if (event.key === "1") {
       setSpeed(1);
     } else if (event.key === "2") {
@@ -977,7 +1016,11 @@ if (renderer) {
     }
 
     sky.position.copy(camera.position);
-    renderer.render(scene, camera);
+    if (state.miniature) {
+      miniature.render(dt, camera);
+    } else {
+      renderer.render(scene, camera);
+    }
 
     if (!state.booted) {
       state.booted = true;
