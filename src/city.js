@@ -2,7 +2,6 @@ import * as THREE from "three";
 import {
   BUILDINGS,
   BUILDINGS_BY_ID,
-  DISTRICTS_BY_ID,
   MARITIME,
   NATURE_BY_ID,
   PARKS,
@@ -17,12 +16,73 @@ const WATER_LEVEL = -1.12;
 const FLOOR_HEIGHT = 0.42;
 const TAU = Math.PI * 2;
 
-const AMUSEMENT_DISTRICT = {
-  id: "amusement",
-  name: "游乐区",
-  en: "AMUSEMENT DISTRICT",
-  description: "摩天轮、旋转木马和彩色帐篷占据的城市角落。",
+// 区域（zone）是城市内部的分区元数据：只描述名称、色调与可放置的建筑家族，
+// 不对应图鉴里的单个物体。真正的“区域”由若干街区地块上的建筑、道具与绿化组合而成。
+const DISTRICT_META = {
+  downtown: {
+    name: "中央商务区",
+    en: "DOWNTOWN CORE",
+    model: { accent: "#ffd166", families: ["office", "commercial", "leisure"] },
+  },
+  oldtown: {
+    name: "老城街区",
+    en: "OLD TOWN",
+    model: { accent: "#e0b978", families: ["residential", "commercial", "landmark"] },
+  },
+  harbor: {
+    name: "滨水港区",
+    en: "HARBOR",
+    model: { accent: "#70c7dc", families: ["industrial", "commercial", "leisure"] },
+  },
+  creative: {
+    name: "创意街区",
+    en: "CREATIVE QUARTER",
+    model: { accent: "#ef816c", families: ["commercial", "leisure", "residential"] },
+  },
+  residential: {
+    name: "花园住宅区",
+    en: "GARDEN RESIDENTIAL",
+    model: { accent: "#9fd06d", families: ["residential"] },
+  },
+  civic: {
+    name: "市政广场区",
+    en: "CIVIC PLAZA",
+    model: { accent: "#d8b66a", families: ["civic", "leisure"] },
+  },
+  academic: {
+    name: "学院区",
+    en: "ACADEMIC QUARTER",
+    model: { accent: "#e8b267", families: ["civic", "residential", "commercial"] },
+  },
+  industrial: {
+    name: "工业区",
+    en: "INDUSTRIAL BELT",
+    model: { accent: "#e4b34f", families: ["industrial", "civic"] },
+  },
+  green: {
+    name: "中央绿轴",
+    en: "CENTRAL GREEN",
+    model: { accent: "#9fd06d", families: [] },
+  },
+  commercial: {
+    name: "商业街区",
+    en: "COMMERCIAL STRIP",
+    model: { accent: "#f1c96b", families: ["commercial", "office", "leisure"] },
+  },
+  amusement: {
+    name: "游乐区",
+    en: "AMUSEMENT DISTRICT",
+    description: "摩天轮、旋转木马和彩色帐篷占据的城市角落。",
+    model: { accent: "#e8735f", families: ["leisure", "commercial"] },
+  },
+  construction: {
+    name: "建设新区",
+    en: "CONSTRUCTION ZONE",
+    model: { accent: "#d98f57", families: [] },
+  },
 };
+
+const AMUSEMENT_DISTRICT = { id: "amusement", ...DISTRICT_META.amusement };
 
 const DISTRICT_GROUND = {
   residential: "#779757",
@@ -170,15 +230,21 @@ function choose(rng, list) {
 }
 
 function makePyramidGeometry() {
+  // Counter-clockwise winding seen from outside, so the front faces point away
+  // from the pyramid's centre. Winding every triangle the other way round (which
+  // this geometry used to do) turns the roof inside out: the near faces get
+  // back-face culled, the renderer then shows the *inside* of the far faces, and
+  // everything under the roof (plates, trims, chimneys, the wall top) shows
+  // through it — which reads as a broken roof texture.
   const vertices = new Float32Array([
     // four sides, non-indexed for crisp flat shading
-    -0.5, 0, -0.5, 0.5, 0, -0.5, 0, 1, 0,
-    0.5, 0, -0.5, 0.5, 0, 0.5, 0, 1, 0,
-    0.5, 0, 0.5, -0.5, 0, 0.5, 0, 1, 0,
-    -0.5, 0, 0.5, -0.5, 0, -0.5, 0, 1, 0,
-    // base
-    -0.5, 0, 0.5, 0.5, 0, 0.5, 0.5, 0, -0.5,
-    -0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 0, -0.5,
+    -0.5, 0, -0.5, 0, 1, 0, 0.5, 0, -0.5,
+    0.5, 0, -0.5, 0, 1, 0, 0.5, 0, 0.5,
+    0.5, 0, 0.5, 0, 1, 0, -0.5, 0, 0.5,
+    -0.5, 0, 0.5, 0, 1, 0, -0.5, 0, -0.5,
+    // base, facing down (-y) so it is culled from above and closes the solid
+    -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0, 0.5,
+    -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0, -0.5,
   ]);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
@@ -599,10 +665,11 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     return lines;
   }
 
-  function addPyramidOutline(parent, sx, sy, sz, x, y, z, scale = 1.003) {
+  function addPyramidOutline(parent, sx, sy, sz, x, y, z, rotation = 0, scale = 1.003) {
     const lines = new THREE.LineSegments(pyramidEdgesGeometry, outlineMaterial);
     lines.scale.set(sx * scale, sy * scale, sz * scale);
     lines.position.set(x, y, z);
+    lines.rotation.y = rotation;
     lines.castShadow = false;
     lines.receiveShadow = false;
     lines.renderOrder = 2;
@@ -1405,8 +1472,12 @@ export function createCity({ seed = randomCitySeed() } = {}) {
           const nX = -uz;
           const nZ = ux;
           const angle = Math.atan2(-dz, dx);
+          // Park the zebra just outside the junction box of the *crossing*
+          // street, so it stays on the carriageway instead of climbing the
+          // adjacent block platform.
+          const other = street === a ? b : a;
+          const distance = other.width / 2 + 0.16;
           for (const side of [-1, 1]) {
-            const distance = street.width / 2 + 0.55;
             for (const lane of [-0.34, 0, 0.34]) {
               crossSpecs.push({
                 x: px + ux * side * distance + nX * lane,
@@ -1488,7 +1559,10 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       for (let index = 0; index <= count; index += 1) {
         const along = -length / 2 + 1.0 + index * 4.2;
         const side = index % 2 === 0 ? 1 : -1;
-        const offset = street.width / 2 + 0.32;
+        // Keep lamps on the carriageway edge: the buildable blocks butt right
+        // up against every arterial, so anything outside the road would sink
+        // into a raised block platform.
+        const offset = street.width / 2 - 0.14;
         addStreetLamp(
           cx + ux * along - uz * side * offset,
           cz + uz * along + ux * side * offset,
@@ -1498,11 +1572,20 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       }
     }
 
-    for (let x = -9.6; x <= 22; x += 2.6) {
-      addTree(group, x, 4.45, rand(rng, 0.45, 0.58), 0.03, "broadleaf");
+    // Palms along the two bay promenades — the walkway between quay road and
+    // water. Positions are chosen between the street furniture and pier heads.
+    const [northPromenade, westPromenade] = plan.promenades ?? [];
+    if (northPromenade) {
+      const lineZ = (northPromenade.z0 + northPromenade.z1) / 2 + 0.18;
+      for (const x of [9.9, 15.0, 19.4]) {
+        addTree(group, x, lineZ, rand(rng, 0.38, 0.48), 0.03, "palm");
+      }
     }
-    for (let z = 7.3; z <= 21.8; z += 2.6) {
-      addTree(group, 4.85, z, rand(rng, 0.42, 0.56), 0.03, "palm");
+    if (westPromenade) {
+      const lineX = (westPromenade.x0 + westPromenade.x1) / 2 - 0.2;
+      for (const z of [7.2, 11.0, 16.5, 21.0]) {
+        addTree(group, lineX, z, rand(rng, 0.38, 0.48), 0.03, "palm");
+      }
     }
   }
 
@@ -2072,17 +2155,11 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         addGableOutline(root, depth * 1.2, roofHeight, width * 1.16, 0, top, 0, Math.PI / 2);
       }
     } else {
-      addPyramid(
-        root,
-        width * 1.16,
-        roofHeight,
-        depth * 1.16,
-        roofMaterial,
-        0,
-        top,
-        0,
-        Math.PI / 4
-      );
+      // Hip roof: the pyramid base must stay axis-aligned with the walls. A 45°
+      // rotation turns the square base into a diamond, which grows the roof
+      // footprint by √2 — the eaves then spill over the neighbouring lots and the
+      // outline wireframe no longer follows the roof faces.
+      addPyramid(root, width * 1.16, roofHeight, depth * 1.16, roofMaterial, 0, top, 0);
       addPyramidOutline(root, width * 1.16, roofHeight, depth * 1.16, 0, top, 0);
     }
 
@@ -2613,6 +2690,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     density = 1,
     rotation = 0,
     blockAngle = 0,
+    blockW = 0,
+    blockD = 0,
   }) {
     if (!def) return null;
     if (def.family === "skyscraper") {
@@ -2625,6 +2704,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         label,
         role,
         rotation,
+        blockW,
+        blockD,
       });
       addBuildingRecordDistrict(record, district);
       return record;
@@ -2997,7 +3078,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       cast: false,
       receive: false,
     });
-    addPyramid(parent, width * 0.66, spireHeight, depth * 0.66, mat.roof, 0, y + 0.46, 0, Math.PI / 4);
+    addPyramid(parent, width * 0.66, spireHeight, depth * 0.66, mat.roof, 0, y + 0.46, 0);
     addBox(parent, 0.028, 0.4, 0.028, mat.dark, 0, y + 0.46 + spireHeight + 0.2, 0, {
       cast: false,
     });
@@ -3058,7 +3139,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       cast: false,
       receive: false,
     });
-    addPyramid(parent, width * 0.42, 0.9, depth * 0.42, mat.roof, 0, y + 0.5 + lanternHeight, 0, Math.PI / 4);
+    addPyramid(parent, width * 0.42, 0.9, depth * 0.42, mat.roof, 0, y + 0.5 + lanternHeight, 0);
     addTowerAntenna(parent, { y: y + 0.5 + lanternHeight + 0.92, height: 0.9, mat });
     return y + 0.5 + lanternHeight + 1.9;
   }
@@ -3193,7 +3274,18 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     return record;
   }
 
-  function addSkyscraperBlock({ blockGroup, localX, localZ, lot, def, label, role = null, rotation = 0 }) {
+  function addSkyscraperBlock({
+    blockGroup,
+    localX,
+    localZ,
+    lot,
+    def,
+    label,
+    role = null,
+    rotation = 0,
+    blockW = 0,
+    blockD = 0,
+  }) {
     const model = def.model;
     const style = model.style ?? "pinnacle";
     const root = new THREE.Group();
@@ -3203,6 +3295,14 @@ export function createCity({ seed = randomCitySeed() } = {}) {
 
     const width = Math.min(lot.w + 1.0, rand(rng, model.width[0], model.width[1]));
     const depth = Math.min(lot.d + 0.6, rand(rng, model.depth[0], model.depth[1]));
+    // Plaza plates must stay inside the block platform; otherwise the granite
+    // apron spills onto the surrounding carriageway.
+    const plazaLimit = Math.min(
+      blockW > 0 ? blockW - 0.08 : lot.w + 1.1,
+      blockD > 0 ? blockD - 0.08 : lot.d + 1.1
+    );
+    const plaza = (group, span, material) =>
+      addSkyscraperPlaza(group, Math.min(span, plazaLimit), material);
     const rise = rand(rng, model.rise[0], model.rise[1]);
     const wallColor = choose(rng, model.walls);
     const accentColor = model.accent ?? "#ffd166";
@@ -3227,7 +3327,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
 
     if (style === "wtc") {
       const span = width * 1.06;
-      addSkyscraperPlaza(root, span, mat);
+      plaza(root, span, mat);
       const gap = Math.max(0.5, width * 0.21);
       const towerWidth = (width - gap) / 2;
       const towerDepth = Math.min(depth, towerWidth * 1.08);
@@ -3271,7 +3371,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       bodyTop = Math.max(bodyTop, tallest - 2.3);
       topY = tallest;
     } else if (style === "twinbridge") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.12, mat);
+      plaza(root, Math.max(width, depth) * 1.12, mat);
       const gap = Math.max(0.48, width * 0.16);
       const towerWidth = (width - gap) / 2;
       const towerDepth = depth;
@@ -3317,7 +3417,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = Math.max(...tops) + 0.9;
       bodyTop = tops[1];
     } else if (style === "pinnacle") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.46, mat);
+      plaza(root, Math.max(width, depth) * 1.46, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.08,
         depth: depth * 1.08,
@@ -3361,7 +3461,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = addSpireCrown(root, { width: width * 0.7, depth: depth * 0.7, y, mat, spireHeight: 1.35 });
       bodyTop = y;
     } else if (style === "facet") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.4, mat);
+      plaza(root, Math.max(width, depth) * 1.4, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.12,
         depth: depth * 1.12,
@@ -3426,7 +3526,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = addSpireCrown(root, { width: width * 0.56, depth: depth * 0.56, y: top + 0.78, mat, spireHeight: 1.1 });
       bodyTop = top;
     } else if (style === "terrace") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.46, mat);
+      plaza(root, Math.max(width, depth) * 1.46, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.06,
         depth: depth * 1.06,
@@ -3450,6 +3550,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       for (let level = 1; level <= levels; level += 1) {
         const y = lobbyTop + (rise * level) / (levels + 1);
         addSkyTerrace(root, {
+          x: 0,
+          z: 0,
           width: coreWidth,
           depth: coreDepth,
           y,
@@ -3458,6 +3560,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         });
         if (level % 2 === 0) {
           addSkyTerrace(root, {
+            x: 0,
+            z: 0,
             width: coreWidth,
             depth: coreDepth,
             y: y + 0.42,
@@ -3484,7 +3588,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = top + 1.0;
       bodyTop = top;
     } else if (style === "twist") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.4, mat);
+      plaza(root, Math.max(width, depth) * 1.4, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.08,
         depth: depth * 1.08,
@@ -3539,7 +3643,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = addSpireCrown(root, { width: width * 0.56, depth: depth * 0.56, y: top + 0.3, mat, spireHeight: 1.2 });
       bodyTop = top;
     } else if (style === "deco") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.44, mat);
+      plaza(root, Math.max(width, depth) * 1.44, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.12,
         depth: depth * 1.12,
@@ -3588,7 +3692,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = y + 3.1;
       bodyTop = y;
     } else if (style === "chrysler") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.42, mat);
+      plaza(root, Math.max(width, depth) * 1.42, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.1,
         depth: depth * 1.1,
@@ -3647,7 +3751,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = y + 1.6;
       bodyTop = y;
     } else if (style === "tiered") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.36, mat);
+      plaza(root, Math.max(width, depth) * 1.36, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.1,
         depth: depth * 1.1,
@@ -3695,7 +3799,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         y += tierHeight + 0.05;
       });
       addBox(root, width * 0.32, 0.3, depth * 0.32, mat.mullion, 0, y + 0.15, 0);
-      addPyramid(root, width * 0.26, 1.9, depth * 0.26, mat.roof, 0, y + 0.3, 0, Math.PI / 4);
+      addPyramid(root, width * 0.26, 1.9, depth * 0.26, mat.roof, 0, y + 0.3, 0);
       const light = addBox(root, 0.07, 0.07, 0.07, beaconMat, 0, y + 2.24, 0, {
         cast: false,
         receive: false,
@@ -3704,7 +3808,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = y + 2.3;
       bodyTop = y;
     } else if (style === "pagoda") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.44, mat);
+      plaza(root, Math.max(width, depth) * 1.44, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.12,
         depth: depth * 1.12,
@@ -3775,7 +3879,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       bodyTop = y + 0.66;
     } else if (style === "petronas") {
       const span = width * 1.08;
-      addSkyscraperPlaza(root, span, mat);
+      plaza(root, span, mat);
       const gap = Math.max(0.52, width * 0.19);
       const towerWidth = (width - gap) / 2;
       const towerDepth = depth * 0.92;
@@ -3846,7 +3950,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = tallest;
       bodyTop = tallest - 1.3;
     } else if (style === "onewtc") {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.46, mat);
+      plaza(root, Math.max(width, depth) * 1.46, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.1,
         depth: depth * 1.1,
@@ -3897,7 +4001,7 @@ export function createCity({ seed = randomCitySeed() } = {}) {
       topY = y + 3.1;
       bodyTop = y;
     } else {
-      addSkyscraperPlaza(root, Math.max(width, depth) * 1.5, mat);
+      plaza(root, Math.max(width, depth) * 1.5, mat);
       const lobbyTop = addSkyscraperLobby(root, {
         width: width * 1.14,
         depth: depth * 1.14,
@@ -4295,9 +4399,9 @@ export function createCity({ seed = randomCitySeed() } = {}) {
   }
 
   function districtFor(block) {
-    const asset = DISTRICTS_BY_ID.get(`d-${block.district}`);
-    if (asset) return { ...asset, id: block.district };
-    return AMUSEMENT_DISTRICT;
+    const meta = DISTRICT_META[block.district];
+    if (!meta) return { ...AMUSEMENT_DISTRICT };
+    return { id: block.district, ...meta };
   }
 
   function addBlockGround(blockGroup, block, district) {
@@ -4460,16 +4564,22 @@ export function createCity({ seed = randomCitySeed() } = {}) {
     addRow("s", target, rowDepth);
     if (ud > rowDepth * 2 + 0.12) addRow("n", target, rowDepth);
     if (uw > 2.4 && ud > 2.2 && rng() < 0.5) {
-      const sideLot = Math.min(1.45, rowDepth);
-      const side = rng() < 0.5 ? -1 : 1;
-      add(
-        side * (uw / 2 - sideLot / 2),
-        rand(rng, -ud * 0.12, ud * 0.12),
-        sideLot,
-        sideLot,
-        side > 0 ? Math.PI / 2 : -Math.PI / 2,
-        null
-      );
+      const twoRows = ud > rowDepth * 2 + 0.12;
+      // Only reserve a side lot in the leftover courtyard; a fixed-size one
+      // would cut into the street-facing rows on narrow blocks.
+      const courtyard = twoRows ? ud - rowDepth * 2 - 0.24 : ud - rowDepth - 0.24;
+      const sideLot = Math.min(1.45, rowDepth, courtyard);
+      if (sideLot > 0.7) {
+        const side = rng() < 0.5 ? -1 : 1;
+        add(
+          side * (uw / 2 - sideLot / 2),
+          rand(rng, -ud * 0.12, ud * 0.12),
+          sideLot,
+          sideLot,
+          side > 0 ? Math.PI / 2 : -Math.PI / 2,
+          null
+        );
+      }
     }
     return lots;
   }
@@ -4493,6 +4603,8 @@ export function createCity({ seed = randomCitySeed() } = {}) {
         density: block.density,
         rotation: lot.rotation,
         blockAngle: block.angle ?? 0,
+        blockW: block.w,
+        blockD: block.d,
       });
     }
   }
@@ -5215,47 +5327,43 @@ export function createCity({ seed = randomCitySeed() } = {}) {
   }
 
   function addPointCluster() {
-    const promenadeZ = plan.quayRoads.north - 0.55;
-    const promenadeX = plan.quayRoads.west - 0.55;
+    const [northPromenade, westPromenade] = plan.promenades ?? [];
+    const promenadeZ = northPromenade
+      ? (northPromenade.z0 + northPromenade.z1) / 2
+      : 5.85;
+    const promenadeX = westPromenade
+      ? (westPromenade.x0 + westPromenade.x1) / 2
+      : 5.85;
 
-    addNewsKiosk(group, 8.2, promenadeZ, 0, 0.03);
-    addBusShelter(group, 13.2, promenadeZ, 0, 0.03);
-    addPostbox(group, 18.0, promenadeZ, 0, 0.03);
-    addTrashBin(group, 10.6, promenadeZ, 0, 0.03);
-    addBikeRack(group, 20.4, promenadeZ, 0, 0.03);
     addPlanter(group, 6.8, promenadeZ, 0, 0.03);
-    addStatue(group, promenadeX, 12.2, Math.PI / 2, 0.03);
-    addBillboard(group, promenadeX, 18.4, Math.PI / 2, 0.03);
+    addNewsKiosk(group, 8.0, promenadeZ, 0, 0.03);
+    addBusShelter(group, 11.5, promenadeZ, 0, 0.03);
+    addPostbox(group, 15.5, promenadeZ, 0, 0.03);
+    addTrashBin(group, 18.6, promenadeZ, 0, 0.03);
+    addBikeRack(group, 21.4, promenadeZ, 0, 0.03);
     addNewsKiosk(group, promenadeX, 8.0, Math.PI / 2, 0.03);
+    addStatue(group, promenadeX, 12.2, Math.PI / 2, 0.03);
     addBench(group, promenadeX, 15.6, Math.PI / 2, 0.03);
-    addCrateStack(group, 16.4, 9.4, 0, -0.36);
-    addCrateStack(group, 19.0, 12.4, 0.4, -0.36);
+    addBillboard(group, promenadeX, 18.4, Math.PI / 2, 0.03);
+    addPlanter(group, promenadeX, 7.0, Math.PI / 2, 0.03);
+    addPlanter(group, 7.0, promenadeZ, 0, 0.03);
+    // Cargo crates waiting on the harbour piers.
+    addCrateStack(group, 13.4, 8.6, 0, -0.36);
+    addCrateStack(group, 17.4, 7.8, 0.4, -0.36);
 
-    // A small monument square marks where the diagonal boulevard meets the bay.
-    const plazaX = 4.4;
-    const plazaZ = 4.2;
-    addRoundCylinder(group, 1.15, 0.04, stoneMat, plazaX, 0.065, plazaZ);
-    addRoundCylinder(group, 0.75, 0.03, plazaMat, plazaX, 0.085, plazaZ);
-    addBox(group, 0.62, 0.16, 0.62, trimMat, plazaX, 0.17, plazaZ);
-    addBox(group, 0.26, 1.5, 0.26, standard("#cfc4ab"), plazaX, 1.0, plazaZ);
-    addBox(group, 0.12, 0.32, 0.12, standard("#d7b768"), plazaX, 1.9, plazaZ);
-    for (let index = 0; index < 8; index += 1) {
-      const angle = (index / 8) * TAU;
-      addRoundCylinder(
-        group,
-        0.05,
-        0.18,
-        steelDarkMat,
-        plazaX + Math.cos(angle) * 1.0,
-        0.14,
-        plazaZ + Math.sin(angle) * 1.0
-      );
-    }
-    addBench(group, plazaX - 1.35, plazaZ + 0.4, Math.PI / 2, 0.03);
-    addBench(group, plazaX + 1.35, plazaZ - 0.4, -Math.PI / 2, 0.03);
+    // Monument roundabout where the waterfront boulevard meets the west quay:
+    // the bay corner is the first thing the default camera sees. Only paving
+    // and the catalogue statue go here — no bespoke ornament.
+    const plaza = plan.plaza ?? { x: 4.4, z: 4.4, radius: 0.95 };
+    const plazaX = plaza.x;
+    const plazaZ = plaza.z;
+    addRoundCylinder(group, plaza.radius + 0.2, 0.04, stoneMat, plazaX, 0.065, plazaZ);
+    addRoundCylinder(group, plaza.radius, 0.03, plazaMat, plazaX, 0.085, plazaZ);
+    addStatue(group, plazaX, plazaZ, Math.PI / 2, 0.09);
 
-    const lightX = 20.4;
-    const lightZ = 8.9;
+    // Lighthouse on the tip of the long east pier.
+    const lightX = 20.8;
+    const lightZ = 10.6;
     const lightBase = -0.4;
     addRoundCylinder(group, 0.44, 0.26, stoneMat, lightX, lightBase + 0.13, lightZ);
     addRoundCylinder(group, 0.31, 1.25, whiteMat, lightX, lightBase + 0.82, lightZ);

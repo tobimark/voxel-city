@@ -1,0 +1,1028 @@
+{
+  "generatedAt": "2026-10-24T11:03:29.128Z",
+  "script": "docs/planning/plan-check.mjs",
+  "source": {
+    "module": "src/city-plan.js",
+    "sha256": "f4a9b9aa5d68dac0a63623e62bf5fd6209afaf762332b05700013a2de1113296",
+    "bytes": 15900,
+    "workspace": {
+      "source": "src/city-plan.js",
+      "sha256": "f4a9b9aa5d68dac0a63623e62bf5fd6209afaf762332b05700013a2de1113296",
+      "sameHash": true
+    }
+  },
+  "cli": {
+    "module": "src/city-plan.js",
+    "seeds": [
+      "A9B0DF33"
+    ],
+    "size": 1100,
+    "tag": null
+  },
+  "method": {
+    "geometry": "Exact convex polygon intersection (Sutherland-Hodgman) of block rectangles and finite road ribbons; rotated block rectangles supported.",
+    "overlapTolerance": 0.01,
+    "connectionTolerance": 0.3,
+    "landModel": "LAND_RECTS treated as a disjoint union; overlapping land rectangles are reported and subtracted pairwise.",
+    "roadModel": "Each street/arterial is a rectangle centred on its centreline with the declared width; no rounded caps, no sidewalks added.",
+    "streetsModel": "plan.streets is checked for containing the arterials; block-vs-street overlap excludes arterials to avoid double counting.",
+    "piersModel": "Pier area fraction inside the BAY rectangle; >= 0.9 counts as 'roughly in water' (piers touch the quay edge by design).",
+    "railModel": "Rail centreline sampled every <=0.5 world units against the land union; rail has no declared width.",
+    "connectivity": "Union-find over centreline segment-to-segment distance <= 0.3 (endpoint snapping or intersection). Ribbon components are reported separately as positive road-paint overlap. Each dangling endpoint also records the gap to the nearest road paint (ribbonGap), so a 0.25 sidewalk seam is distinguishable from a real gap.",
+    "arterialNetwork": "Centerline components plus ribbon-overlap components; crossings are proper interior segment crossings.",
+    "blocksAxisAlignedNote": "The rewrite is expected to emit axis-aligned blocks; rotation checks stay active so 'before' images remain faithful."
+  },
+  "summary": [
+    {
+      "seed": "A9B0DF33",
+      "blocks": 59,
+      "streets": 49,
+      "streetsUnique": 49,
+      "arterials": 17,
+      "districts": 11,
+      "rotated": 0,
+      "maxAbsAngle": 0,
+      "blockOverlaps": 0,
+      "blockOverlapArea": 0,
+      "arterialBlockOverlaps": 0,
+      "arterialBlockArea": 0,
+      "streetBlockOverlaps": 0,
+      "streetBlockArea": 0,
+      "outsideLand": 0,
+      "outsideZone": 0,
+      "components": 20,
+      "componentsRibbon": 20,
+      "largestComponent": 17,
+      "dangles": 78,
+      "arterialComponents": 1,
+      "arterialRibbonComponents": 1,
+      "arterialCrossings": 7,
+      "arterialJunctions": 19,
+      "piers": 7,
+      "piersInBay": 7,
+      "pierInsideBayMin": 1,
+      "railInsideLand": true,
+      "blockArea": 800.08,
+      "landArea": 1863.96,
+      "coveragePct": 42.9,
+      "rolesPresent": 21,
+      "missingRoles": 0
+    }
+  ],
+  "baseline": {
+    "seed": "A9B0DF33",
+    "summary": {
+      "seed": "A9B0DF33",
+      "blocks": 59,
+      "streets": 49,
+      "streetsUnique": 49,
+      "arterials": 17,
+      "districts": 11,
+      "rotated": 0,
+      "maxAbsAngle": 0,
+      "blockOverlaps": 0,
+      "blockOverlapArea": 0,
+      "arterialBlockOverlaps": 0,
+      "arterialBlockArea": 0,
+      "streetBlockOverlaps": 0,
+      "streetBlockArea": 0,
+      "outsideLand": 0,
+      "outsideZone": 0,
+      "components": 20,
+      "componentsRibbon": 20,
+      "largestComponent": 17,
+      "dangles": 78,
+      "arterialComponents": 1,
+      "arterialRibbonComponents": 1,
+      "arterialCrossings": 7,
+      "arterialJunctions": 19,
+      "piers": 7,
+      "piersInBay": 7,
+      "pierInsideBayMin": 1,
+      "railInsideLand": true,
+      "blockArea": 800.08,
+      "landArea": 1863.96,
+      "coveragePct": 42.9,
+      "rolesPresent": 21,
+      "missingRoles": 0
+    },
+    "details": {
+      "counts": {
+        "blocks": 59,
+        "streets": 49,
+        "plainStreets": 32,
+        "streetsUnique": 49,
+        "arterials": 17,
+        "districts": [
+          "academic",
+          "amusement",
+          "civic",
+          "commercial",
+          "creative",
+          "downtown",
+          "green",
+          "harbor",
+          "industrial",
+          "oldtown",
+          "residential"
+        ],
+        "piers": 7,
+        "promenades": 2,
+        "rotatedBlocks": 0,
+        "maxAbsAngle": 0,
+        "duplicateSegments": 17,
+        "streetsIncludeArterials": true
+      },
+      "land": {
+        "rects": 2,
+        "area": 1863.96,
+        "overlaps": [],
+        "bayLandOverlapArea": 0,
+        "islandExtent": 23.2
+      },
+      "containment": {
+        "outsideLand": {
+          "total": 0,
+          "items": []
+        },
+        "outsideZone": {
+          "total": 0,
+          "items": []
+        },
+        "zonesChecked": true,
+        "zonesSource": "module.ZONES",
+        "unknownZoneBlocks": 0,
+        "zones": [
+          {
+            "id": "downtown",
+            "rect": [
+              -2.35,
+              10.85,
+              -5.85,
+              3.05
+            ]
+          },
+          {
+            "id": "oldtown",
+            "rect": [
+              -9.45,
+              3.05,
+              5.75,
+              13.55
+            ]
+          },
+          {
+            "id": "civic",
+            "rect": [
+              -9.45,
+              -3.85,
+              -5.85,
+              3.05
+            ]
+          },
+          {
+            "id": "commercial",
+            "rect": [
+              -9.45,
+              8.45,
+              -13.05,
+              -8.15
+            ]
+          },
+          {
+            "id": "resA",
+            "rect": [
+              -21.55,
+              -16.75,
+              -8.75,
+              13.55
+            ]
+          },
+          {
+            "id": "parkwest",
+            "rect": [
+              -14.85,
+              -11.35,
+              -13.05,
+              13.55
+            ]
+          },
+          {
+            "id": "resB",
+            "rect": [
+              -10.45,
+              8.45,
+              -20.5,
+              -15.35
+            ]
+          },
+          {
+            "id": "academic",
+            "rect": [
+              10.35,
+              21.55,
+              -20.5,
+              -8.15
+            ]
+          },
+          {
+            "id": "industrial",
+            "rect": [
+              -21.55,
+              -16.75,
+              -20.5,
+              -10.05
+            ]
+          },
+          {
+            "id": "station",
+            "rect": [
+              -14.85,
+              -11.75,
+              -20.5,
+              -15.35
+            ]
+          },
+          {
+            "id": "port",
+            "rect": [
+              12.75,
+              21.55,
+              -5.85,
+              3.05
+            ]
+          },
+          {
+            "id": "suburb",
+            "rect": [
+              -21.55,
+              -9.15,
+              15.65,
+              21.55
+            ]
+          },
+          {
+            "id": "amusement",
+            "rect": [
+              -7.65,
+              -1.75,
+              15.65,
+              21.55
+            ]
+          },
+          {
+            "id": "southpark",
+            "rect": [
+              -0.25,
+              3.05,
+              15.65,
+              21.55
+            ]
+          }
+        ]
+      },
+      "overlap": {
+        "blockBlock": {
+          "total": 0,
+          "items": []
+        },
+        "blockBlockArea": 0,
+        "blockArterial": {
+          "total": 0,
+          "items": []
+        },
+        "blockArterialArea": 0,
+        "blockStreet": {
+          "total": 0,
+          "items": []
+        },
+        "blockStreetArea": 0
+      },
+      "arterialNetwork": {
+        "components": 1,
+        "componentSizes": [
+          17
+        ],
+        "ribbonComponents": 1,
+        "ribbonComponentSizes": [
+          17
+        ],
+        "crossings": 7,
+        "crossingPairs": [
+          [
+            3,
+            7
+          ],
+          [
+            3,
+            10
+          ],
+          [
+            4,
+            8
+          ],
+          [
+            5,
+            8
+          ],
+          [
+            5,
+            12
+          ],
+          [
+            6,
+            12
+          ],
+          [
+            7,
+            14
+          ]
+        ],
+        "junctions": 19,
+        "hangingEndpoints": {
+          "total": 14,
+          "items": [
+            {
+              "arterial": 0,
+              "end": 0,
+              "distance": 6.6
+            },
+            {
+              "arterial": 1,
+              "end": 1,
+              "distance": 1.1
+            },
+            {
+              "arterial": 2,
+              "end": 0,
+              "distance": 13
+            },
+            {
+              "arterial": 2,
+              "end": 1,
+              "distance": 1.1
+            },
+            {
+              "arterial": 3,
+              "end": 0,
+              "distance": 0.95
+            },
+            {
+              "arterial": 3,
+              "end": 1,
+              "distance": 0.7
+            },
+            {
+              "arterial": 4,
+              "end": 0,
+              "distance": 0.95
+            },
+            {
+              "arterial": 5,
+              "end": 0,
+              "distance": 0.95
+            },
+            {
+              "arterial": 6,
+              "end": 1,
+              "distance": 1.1
+            },
+            {
+              "arterial": 7,
+              "end": 0,
+              "distance": 4.7
+            },
+            {
+              "arterial": 10,
+              "end": 0,
+              "distance": 6.3
+            },
+            {
+              "arterial": 12,
+              "end": 0,
+              "distance": 1.1
+            },
+            {
+              "arterial": 13,
+              "end": 0,
+              "distance": 4.7
+            },
+            {
+              "arterial": 14,
+              "end": 1,
+              "distance": 0.7
+            }
+          ]
+        },
+        "connected": true
+      },
+      "connectivity": {
+        "tolerance": 0.3,
+        "segments": 49,
+        "components": 20,
+        "componentSizes": [
+          17,
+          5,
+          3,
+          3,
+          3,
+          3,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "ribbonComponents": 20,
+        "ribbonComponentSizes": [
+          17,
+          5,
+          3,
+          3,
+          3,
+          3,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "danglingRibbonGap": {
+          "min": 0,
+          "median": 0.25,
+          "max": 3.109,
+          "within03": 68
+        },
+        "largestComponentFraction": 0.347,
+        "danglingEndpoints": {
+          "total": 78,
+          "items": [
+            {
+              "road": 0,
+              "end": 0,
+              "x": -5.47,
+              "z": 5.75,
+              "nearestRoad": 37,
+              "distance": 1.35,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 0,
+              "end": 1,
+              "x": -5.47,
+              "z": 13.55,
+              "nearestRoad": 38,
+              "distance": 1.05,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 1,
+              "end": 0,
+              "x": -1.39,
+              "z": 5.75,
+              "nearestRoad": 37,
+              "distance": 1.35,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 1,
+              "end": 1,
+              "x": -1.39,
+              "z": 13.55,
+              "nearestRoad": 38,
+              "distance": 1.05,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 2,
+              "end": 0,
+              "x": -9.45,
+              "z": 9.62,
+              "nearestRoad": 40,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 2,
+              "end": 1,
+              "x": 3.05,
+              "z": 9.62,
+              "nearestRoad": 44,
+              "distance": 1.35,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 3,
+              "end": 0,
+              "x": -21.55,
+              "z": -17.46,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 3,
+              "end": 1,
+              "x": -16.75,
+              "z": -17.46,
+              "nearestRoad": 39,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 4,
+              "end": 0,
+              "x": -21.55,
+              "z": -13.38,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 4,
+              "end": 1,
+              "x": -16.75,
+              "z": -13.38,
+              "nearestRoad": 35,
+              "distance": 0.822,
+              "ribbonGap": 0
+            },
+            {
+              "road": 5,
+              "end": 0,
+              "x": 1.88,
+              "z": -5.85,
+              "nearestRoad": 36,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 5,
+              "end": 1,
+              "x": 1.88,
+              "z": 3.05,
+              "nearestRoad": 37,
+              "distance": 1.35,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 6,
+              "end": 0,
+              "x": 7.18,
+              "z": -5.85,
+              "nearestRoad": 36,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 6,
+              "end": 1,
+              "x": 7.18,
+              "z": 3.05,
+              "nearestRoad": 37,
+              "distance": 1.35,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 7,
+              "end": 0,
+              "x": -2.35,
+              "z": -1.17,
+              "nearestRoad": 41,
+              "distance": 0.75,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 7,
+              "end": 1,
+              "x": 10.85,
+              "z": -1.17,
+              "nearestRoad": 43,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 8,
+              "end": 0,
+              "x": -21.55,
+              "z": -5.43,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 8,
+              "end": 1,
+              "x": -16.75,
+              "z": -5.43,
+              "nearestRoad": 39,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 9,
+              "end": 0,
+              "x": -21.55,
+              "z": -1.59,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 9,
+              "end": 1,
+              "x": -16.75,
+              "z": -1.59,
+              "nearestRoad": 39,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 10,
+              "end": 0,
+              "x": -21.55,
+              "z": 2.49,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 10,
+              "end": 1,
+              "x": -16.75,
+              "z": 2.49,
+              "nearestRoad": 39,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 11,
+              "end": 0,
+              "x": -21.55,
+              "z": 6.49,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 11,
+              "end": 1,
+              "x": -16.75,
+              "z": 6.49,
+              "nearestRoad": 39,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 12,
+              "end": 0,
+              "x": -21.55,
+              "z": 10.15,
+              "nearestRoad": 32,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 12,
+              "end": 1,
+              "x": -16.75,
+              "z": 10.15,
+              "nearestRoad": 39,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 13,
+              "end": 0,
+              "x": 17.01,
+              "z": -5.85,
+              "nearestRoad": 36,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 13,
+              "end": 1,
+              "x": 17.01,
+              "z": 3.05,
+              "nearestRoad": 37,
+              "distance": 1.35,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 14,
+              "end": 0,
+              "x": 12.75,
+              "z": -1.51,
+              "nearestRoad": 43,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 14,
+              "end": 1,
+              "x": 21.55,
+              "z": -1.51,
+              "nearestRoad": 34,
+              "distance": 0.85,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 15,
+              "end": 0,
+              "x": -7.21,
+              "z": -20.5,
+              "nearestRoad": 19,
+              "distance": 2.663,
+              "ribbonGap": 2.138
+            },
+            {
+              "road": 15,
+              "end": 1,
+              "x": -7.21,
+              "z": -15.35,
+              "nearestRoad": 35,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 16,
+              "end": 0,
+              "x": -3,
+              "z": -20.5,
+              "nearestRoad": 19,
+              "distance": 2.663,
+              "ribbonGap": 2.138
+            },
+            {
+              "road": 16,
+              "end": 1,
+              "x": -3,
+              "z": -15.35,
+              "nearestRoad": 35,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 17,
+              "end": 0,
+              "x": 1.35,
+              "z": -20.5,
+              "nearestRoad": 19,
+              "distance": 2.663,
+              "ribbonGap": 2.138
+            },
+            {
+              "road": 17,
+              "end": 1,
+              "x": 1.35,
+              "z": -15.35,
+              "nearestRoad": 35,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 18,
+              "end": 0,
+              "x": 4.86,
+              "z": -20.5,
+              "nearestRoad": 19,
+              "distance": 2.663,
+              "ribbonGap": 2.138
+            },
+            {
+              "road": 18,
+              "end": 1,
+              "x": 4.86,
+              "z": -15.35,
+              "nearestRoad": 35,
+              "distance": 1.15,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 19,
+              "end": 0,
+              "x": -10.45,
+              "z": -17.84,
+              "nearestRoad": 45,
+              "distance": 0.65,
+              "ribbonGap": 0.25
+            },
+            {
+              "road": 19,
+              "end": 1,
+              "x": 8.45,
+              "z": -17.84,
+              "nearestRoad": 42,
+              "distance": 0.95,
+              "ribbonGap": 0.25
+            }
+          ]
+        }
+      },
+      "piers": {
+        "checks": [
+          {
+            "pier": 0,
+            "dir": "south",
+            "area": 3.2,
+            "insideBayFraction": 1,
+            "ok": true
+          },
+          {
+            "pier": 1,
+            "dir": "south",
+            "area": 5.46,
+            "insideBayFraction": 1,
+            "ok": true
+          },
+          {
+            "pier": 2,
+            "dir": "south",
+            "area": 4.32,
+            "insideBayFraction": 1,
+            "ok": true
+          },
+          {
+            "pier": 3,
+            "dir": "south",
+            "area": 6.72,
+            "insideBayFraction": 1,
+            "ok": true
+          },
+          {
+            "pier": 4,
+            "dir": "east",
+            "area": 3.74,
+            "insideBayFraction": 1,
+            "ok": true
+          },
+          {
+            "pier": 5,
+            "dir": "east",
+            "area": 5.98,
+            "insideBayFraction": 1,
+            "ok": true
+          },
+          {
+            "pier": 6,
+            "dir": "east",
+            "area": 3,
+            "insideBayFraction": 1,
+            "ok": true
+          }
+        ],
+        "insideBayQty": 7,
+        "minInsideBayFraction": 1
+      },
+      "rail": {
+        "segments": 1,
+        "samples": 91,
+        "samplesOutsideLand": 0,
+        "insideLand": true,
+        "outsidePoints": [],
+        "stationInsideLand": true
+      },
+      "blockStats": {
+        "width": {
+          "min": 2.457,
+          "median": 3.686,
+          "max": 6.015,
+          "mean": 3.906
+        },
+        "depth": {
+          "min": 1.962,
+          "median": 3.423,
+          "max": 8.9,
+          "mean": 3.375
+        },
+        "blockArea": {
+          "min": 4.821,
+          "median": 13.139,
+          "max": 49.84,
+          "total": 800.08
+        },
+        "landArea": 1863.96,
+        "coveragePct": 42.9
+      },
+      "roles": {
+        "expected": [
+          "landmark",
+          "skyscraper",
+          "office",
+          "clocktower",
+          "market",
+          "department",
+          "civic",
+          "school",
+          "campus-green",
+          "energy",
+          "warehouse",
+          "yard",
+          "harbor-office",
+          "neighbourhood-park",
+          "construction",
+          "station",
+          "promenade-park",
+          "amusement",
+          "greenway-*"
+        ],
+        "present": [
+          "amusement",
+          "campus-green",
+          "civic",
+          "clocktower",
+          "construction",
+          "department",
+          "energy",
+          "greenway-cherry",
+          "greenway-pond",
+          "greenway-sports",
+          "harbor-office",
+          "landmark",
+          "market",
+          "neighbourhood-park",
+          "office",
+          "promenade-park",
+          "school",
+          "skyscraper",
+          "station",
+          "warehouse",
+          "yard"
+        ],
+        "counts": {
+          "construction": 1,
+          "energy": 1,
+          "station": 1,
+          "neighbourhood-park": 2,
+          "greenway-pond": 2,
+          "department": 1,
+          "market": 1,
+          "school": 1,
+          "campus-green": 1,
+          "greenway-cherry": 2,
+          "warehouse": 1,
+          "yard": 1,
+          "office": 3,
+          "skyscraper": 2,
+          "civic": 1,
+          "greenway-sports": 1,
+          "harbor-office": 1,
+          "landmark": 1,
+          "clocktower": 1,
+          "amusement": 1,
+          "promenade-park": 1
+        },
+        "greenwayRoles": [
+          "greenway-cherry",
+          "greenway-pond",
+          "greenway-sports"
+        ],
+        "nullRoleBlocks": 32,
+        "missing": []
+      }
+    },
+    "png": {
+      "plan": "D:\\workspace\\voxel-city\\docs\\planning\\plan-a9b0df33.png",
+      "violations": "D:\\workspace\\voxel-city\\docs\\planning\\plan-a9b0df33-violations.png"
+    }
+  },
+  "pngFiles": {
+    "A9B0DF33": {
+      "plan": "D:\\workspace\\voxel-city\\docs\\planning\\plan-a9b0df33.png",
+      "violations": "D:\\workspace\\voxel-city\\docs\\planning\\plan-a9b0df33-violations.png"
+    }
+  },
+  "outputs": [
+    "plan-report.json",
+    "plan-a9b0df33.png",
+    "plan-a9b0df33-violations.png"
+  ],
+  "limitations": [
+    "PNG has no text labels (pure Node); district colour legend is printed to the console.",
+    "Land union area assumes LAND_RECTS do not overlap in complex ways; pairwise subtraction is exact for the current 2-rectangle L shape.",
+    "Block-vs-road overlap uses declared widths; visually wider painted asphalt or omitted sidewalks are not modelled.",
+    "Promenades are drawn but not counted as roads in overlap/connectivity checks.",
+    "Piers are only checked against the bay rectangle; pier-to-quay attachment is not graded.",
+    "Connectivity ignores terrain, elevation and buildings standing in the right-of-way.",
+    "Dangling endpoints are a warning, not automatically an error: quay-side dead ends are a legitimate design."
+  ]
+}
