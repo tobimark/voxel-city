@@ -6,6 +6,8 @@
 
 城市观测站 · 城市物体图鉴 · 组合层
 
+[**MIT License**](./LICENSE) · Copyright (c) 2026 tobi
+
 ![城市观测站](./docs/screenshots/city.jpg)
 
 </div>
@@ -304,6 +306,13 @@ pixel-bay/
 
 ## 许可
 
-仓库目前**没有附带 `LICENSE` 文件**；在明确授权之前，默认保留所有权利（All rights reserved）。
+本项目基于 [MIT 许可证](./LICENSE) 开源。
 
-如果你打算把它开源，建议补充一份许可证（MIT / Apache-2.0 等）并在本节说明。
+```
+Copyright (c) 2026 tobi <qiaoyuangcd@gmail.com>
+```
+
+你可以自由地使用、复制、修改、合并、发布、分发、再授权和/或销售本软件的副本，唯一的要求是：在所有副本或实质性部分中保留上述版权声明与许可声明。本软件按「原样」提供，不附带任何明示或暗示的担保。
+
+第三方依赖：[Three.js](https://threejs.org/)（MIT）、[Vite](https://vite.dev/)（MIT）。
+
