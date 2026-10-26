@@ -26,6 +26,7 @@
 - [技术架构](#技术架构)
 - [目录结构](#目录结构)
 - [离线工具链](#离线工具链)
+- [多 Agent 接入](#多-agent-接入)
 - [性能与已知限制](#性能与已知限制)
 - [文档索引](#文档索引)
 - [开发约定](#开发约定)
@@ -47,6 +48,7 @@
 - **图鉴优先**：城市里出现的每一件建筑、道具、载具，都必须在图鉴里登记过（见 `AGENTS.md`）。图鉴是资产清单，城市只是它的一个消费者。
 - **纯程序化 + 共享几何体**：没有外部模型文件，全部由代码用少量基础几何体拼出来；材质按「颜色 + 参数」缓存复用。
 - **零框架**：纯 ESM + Vite，没有 UI 框架，样式为手写 CSS。
+- **可被多 Agent 接入**：规划 / 数据 / 建模 / 渲染分层解耦，城市是种子的纯函数；另提供 JSON 世界快照与离线校验工具，方便外部程序或多个 Agent 协作（见 [多 Agent 接入](#多-agent-接入)）。
 
 技术栈：**Three.js 0.186** · **Vite 8** · 原生 ES Modules · 手写 CSS。
 
@@ -252,6 +254,7 @@ pixel-bay/
 | `node docs/planning/render-city.mjs --view hero --out docs/planning/render-hero.png` | 整城软件渲染，支持 `hero` / `iso` / `top`，可加 `--seed` `--crop` `--scale` `--src` |
 | `node docs/planning/plan-check.mjs` | 规划结构审计（街区 × 路网 / 越界 / 悬空端点）并输出俯视预览图 |
 | `node docs/planning/audit.mjs` | 只读生成器审计，结果写入 `docs/planning/audit-results.json` |
+| `node docs/planning/export-city.mjs --seed 7ECF35DF` | 导出该种子的稳定 JSON 世界快照（`--out` `--compact` 可选），供外部程序 / Agent 消费 |
 | `node docs/review/metrics.mjs` | 网格 / 材质 / draw call / 实例数 / 确定性指标 |
 | `node --expose-gc docs/review/runtime-probe.mjs` | raycast 开销、`dispose()` 完整性、连续重建的内存增长 |
 | `node docs/skyscrapers/render.mjs --group skyscrapers` | 图鉴模型离线渲染（`--ids` `--view` `--scale` 可选） |
@@ -259,6 +262,64 @@ pixel-bay/
 | `python docs/miniature-study/make-preview.py` | 微缩摄影效果的静态预览 |
 
 这些脚本只读取应用源码、只往 `docs/` 里写产物，不会改动 `src/`。
+
+## 多 Agent 接入
+
+（Multi-Agent Integration）
+
+仓库本身不含 Agent 运行时，但它的分层是**为外部程序 / 多个 Agent 协作设计的**：规划、数据、建模、渲染彼此解耦，城市是种子的纯函数，关键产物都能在 Node 里离线生成与校验。因此可以把它当作多 Agent 系统的「共享世界」——不同 Agent 负责不同层，用种子对齐世界状态，用离线工具互相验收。
+
+### 已具备的接入面
+
+| 接入点 | 位置 | 说明 |
+| --- | --- | --- |
+| 纯数据规划层 | `src/city-plan.js` → `createCityPlan(rng)` | 只返回街区、路网、栈桥、步道等纯数据，不依赖 Three.js，可直接生成或替换规划 |
+| 城市构建 API | `src/city.js` → `createCity({ seed })` | 返回 `group`（Three.js 场景）、`buildings`（id / 名称 / 类型 / 坐标 / 高度 / 人口 / 边界）、`cars` / `boats` / `blocks`、`stats`，以及 `update` / `updateEnvironment` / `dispose` |
+| 图鉴数据 | `src/object-catalog.js` | `ASSETS` / `ASSET_BY_ID` / `BUILDINGS_BY_ID` 等 Map，可按 id 查询，也可用来校验「城市元素必须来自图鉴」 |
+| 组合层生成 | `src/composition-catalog.js` → `generateComposition` | 纯数据组合计划（种子 → 布局），可被读取或替换 |
+| 世界状态标识 | URL `?seed=<hex>&projection=&hour=` | 一个种子 = 一座可分享、可复现的城市，Agent 之间用它对齐上下文 |
+| 离线校验 | `docs/planning/*.mjs`、`docs/review/*.mjs` | 无浏览器也能建城、审计规划、出图、量指标 |
+| 结构化快照 | `docs/planning/export-city.mjs` → `city-<SEED>.json` | 种子 → 稳定 JSON（统计、功能区、街区、建筑、车船、图鉴摘要），可 diff、可跨语言消费 |
+
+### 三种接入方式
+
+**1. 直接 import（Node / 构建期）** —— 与仓库里的工具脚本同一套做法：
+
+```js
+// agent.mjs
+const ctx2d = { fillStyle: null, createRadialGradient: () => ({ addColorStop() {} }), fillRect() {} };
+globalThis.document = { createElement: () => ({ width: 64, height: 64, style: {}, getContext: () => ctx2d }) };
+
+const { createCity } = await import("./src/city.js");
+const city = createCity({ seed: 0x7ECF35DF });
+console.log(city.stats);              // { buildings, cars, boats, districts, population, jobs, parks }
+console.log(city.buildings[0].name);  // 建筑记录：id / 坐标 / 高度 / 人口 / 所属功能区…
+city.dispose();
+```
+
+**2. JSON 快照（跨进程 / 跨语言）**：
+
+```bash
+node docs/planning/export-city.mjs --seed 7ECF35DF
+# → docs/planning/city-7ECF35DF.json（--out 可改路径，--compact 输出单行）
+```
+
+输出固定 schema（`schema: 1`）：`seed` / `stats` / `districts` / `blocks` / `buildings` / `vehicles` / `catalog`。同一 seed 两次导出**字节一致**（无时间戳），适合 Agent 之间做 diff 与回归断言；`--compact` 可输出单行 JSON。
+
+**3. URL 契约（人与 Agent 共享）**：把 `?seed=…` 链接交给另一个 Agent 或人，打开就是同一座城市；图鉴用 `?asset=`，组合层用 `?seed=&rolls=`。
+
+### 协作模式建议
+
+- **按层分工**：规划 Agent（`city-plan.js`）/ 建筑与道具 Agent（`city.js`）/ 图鉴与模型 Agent（`object-catalog.js` + `showcase-models.js`）/ 组合 Agent（`composition-*.js`）——各改各的层，改动面不重叠。
+- **种子对齐**：把种子当作世界 ID，任何「我们看的是不是同一座城」的问题都用种子回答。
+- **门禁自检**：每个 Agent 提交前跑 `node docs/planning/city-smoke.mjs` + `npm run build`；动规划再加 `plan-check.mjs`，动性能相关再加 `metrics.mjs`。
+- **共享约束**：`AGENTS.md` 的「城市元素必须来自图鉴」是所有 Agent 的硬约束——新元素先登记图鉴，再被城市消费。
+- **可复现对比**：用 `export-city.mjs` 导出改前 / 改后的快照做结构化 diff，比截图对比更适合自动判定。
+
+### 当前边界
+
+- 仓库**不包含** Agent 运行时、消息总线或网络 API；多 Agent 的编排在仓库之外（由宿主系统负责），这里提供的是**数据契约、确定性复现与离线验证**。
+- 运行时实时改造城市（Agent 在线增删街区）需要额外加一层「命令 → 重建」接口；现有架构下最省事的做法是「Agent 产出种子 / 规划数据 → 重新 `createCity`」。
 
 ## 性能与已知限制
 

@@ -19,3 +19,5 @@ docs/skyscrapers/sheet-*.png
 ring-study/preview-plan.json
 ring-study/zoom/
 benchmark-city/preview/plan.json
+# 由 export-city.mjs 生成的世界快照（按种子生成，不入库）
+docs/planning/city-*.json
