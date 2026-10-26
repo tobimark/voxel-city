@@ -12,7 +12,10 @@ docs/miniature-study/*.png
 docs/skyscrapers/after*/
 docs/skyscrapers/after-card/
 docs/skyscrapers/before/
+# 对照图由 compose.py 生成，但被 docs/skyscrapers/README.md 引用，所以保留入库
 docs/skyscrapers/sheet-*.png
+!docs/skyscrapers/sheet-landmarks.png
+!docs/skyscrapers/sheet-portfolio.png
 ring-study/preview-plan.json
 ring-study/zoom/
 benchmark-city/preview/plan.json
