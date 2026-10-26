@@ -1,3 +1,5 @@
+import { VARIANTS } from "./catalog-variants/index.js";
+
 const fact = (label, value) => ({ label, value });
 
 const building = (id, family, name, en, description, tags, facts, model, districts) => ({
@@ -34,13 +36,6 @@ export const GROUPS = [
     en: "CONSTRUCTION SITES",
     description: "塔吊、脚手架、围挡与未完工的楼体，城市仍在持续生长。",
     accent: "#d98f57",
-  },
-  {
-    id: "districts",
-    name: "区域",
-    en: "DISTRICTS",
-    description: "不同功能与气质的街区，共同组成像素湾的城市肌理。",
-    accent: "#72cec0",
   },
   {
     id: "parks",
@@ -1139,213 +1134,6 @@ const constructionAssets = [
   ),
 ];
 
-const district = (id, name, en, description, tags, facts, model) => ({
-  id: `d-${id}`,
-  group: "districts",
-  family: "district",
-  name,
-  en,
-  description,
-  tags,
-  facts,
-  model: { kind: "district", district: id, ...model },
-});
-
-const districtAssets = [
-  district(
-    "downtown",
-    "中央商务区",
-    "DOWNTOWN CORE",
-    "玻璃塔与阶梯塔围成的城市心脏。午间的人流像潮汐一样涨落。",
-    ["核心区", "高密度", "商务"],
-    [fact("定位", "城市中心"), fact("主力", "商务塔楼"), fact("氛围", "玻璃与霓虹")],
-    {
-      accent: "#ffd166",
-      ground: "#cfc4ab",
-      samples: ["b-glass", "b-stepped", "b-observation", "b-hotel"],
-      families: ["office", "commercial", "leisure"],
-      props: ["s-statue", "s-billboard", "s-planter"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "oldtown",
-    "老城街区",
-    "OLD TOWN",
-    "低矮的联排住宅、旧书店和钟楼挤在一起，街道尺度亲切而细碎。",
-    ["历史", "低层", "砖墙"],
-    [fact("定位", "旧城核心"), fact("主力", "联排与小店"), fact("氛围", "暖色砖墙")],
-    {
-      accent: "#e0b978",
-      ground: "#c4ad88",
-      samples: ["b-townhouse", "b-bookshop", "b-cafe", "b-clocktower"],
-      families: ["residential", "commercial", "landmark"],
-      props: ["s-bench", "s-postbox", "s-bikerack"],
-      parkType: "p-cherry",
-    }
-  ),
-  district(
-    "harbor",
-    "滨水港区",
-    "HARBOR",
-    "仓库、修船工坊和海鲜餐厅沿着水线排开，海鸥比行人还多。",
-    ["港口", "仓储", "海风"],
-    [fact("定位", "西南水岸"), fact("主力", "仓库与餐厅"), fact("氛围", "盐味与灯影")],
-    {
-      accent: "#70c7dc",
-      ground: "#aeb0a5",
-      samples: ["b-warehouse", "b-diner", "b-lighthouse", "b-workshop"],
-      families: ["industrial", "commercial", "leisure"],
-      props: ["s-bench", "s-kiosk", "s-billboard", "s-bin"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "creative",
-    "创意街区",
-    "CREATIVE QUARTER",
-    "书店、咖啡、影院和游戏厅共享同一条后街。夜里霓虹会变成第二套路灯。",
-    ["创意", "霓虹", "小店"],
-    [fact("定位", "东南街区"), fact("主力", "咖啡与娱乐"), fact("氛围", "霓虹与涂鸦")],
-    {
-      accent: "#ef816c",
-      ground: "#c5b9a2",
-      samples: ["b-cafe", "b-arcade", "b-cinema", "b-bookshop"],
-      families: ["commercial", "leisure", "residential"],
-      props: ["s-billboard", "s-kiosk", "s-bikerack", "s-planter"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "residential",
-    "花园住宅区",
-    "GARDEN RESIDENTIAL",
-    "坡顶小屋和低层公寓被花园包围，街角总有孩子在追一只慢吞吞的猫。",
-    ["居住", "花园", "安静"],
-    [fact("定位", "北部街区"), fact("主力", "住宅与庭园"), fact("氛围", "树影与晚风")],
-    {
-      accent: "#9fd06d",
-      ground: "#88a968",
-      samples: ["b-cottage", "b-courtyard", "b-lowrise", "b-highrise"],
-      families: ["residential"],
-      props: ["s-bench", "s-planter", "s-bikerack", "s-busstop"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "civic",
-    "市政广场区",
-    "CIVIC PLAZA",
-    "图书馆、博物馆和市政厅围着一片铺石广场。鸽子在台阶上散步。",
-    ["公共", "广场", "石阶"],
-    [fact("定位", "城市中轴"), fact("主力", "图书馆与市政厅"), fact("氛围", "庄重与日常")],
-    {
-      accent: "#d8b66a",
-      ground: "#d4cab7",
-      samples: ["b-cityhall", "b-library", "b-museum", "b-clinic"],
-      families: ["civic", "leisure"],
-      props: ["s-statue", "s-planter", "s-bench", "s-busstop"],
-      parkType: "p-fountain",
-    }
-  ),
-  district(
-    "academic",
-    "学院区",
-    "ACADEMIC QUARTER",
-    "学校、图书馆和宿舍共用一个安静的街区，铃声和钟声经常重叠。",
-    ["学院", "学校", "树荫"],
-    [fact("定位", "西北街区"), fact("主力", "学校与宿舍"), fact("氛围", "铃声与树影")],
-    {
-      accent: "#e8b267",
-      ground: "#93aa70",
-      samples: ["b-school", "b-library", "b-lowrise", "b-bookshop"],
-      families: ["civic", "residential", "commercial"],
-      props: ["s-bikerack", "s-bench", "s-billboard", "s-busstop"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "industrial",
-    "工业区",
-    "INDUSTRIAL BELT",
-    "能源站、仓库和工坊占据岛的东南岸。夜里烟囱的红灯像另一组星星。",
-    ["工业", "能源", "仓储"],
-    [fact("定位", "东南岸边"), fact("主力", "工厂与仓库"), fact("氛围", "金属与低鸣")],
-    {
-      accent: "#e4b34f",
-      ground: "#9c9e96",
-      samples: ["b-energy", "b-warehouse", "b-workshop", "b-fire"],
-      families: ["industrial", "civic"],
-      props: ["s-billboard", "s-bin", "s-planter"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "green",
-    "中央绿轴",
-    "CENTRAL GREEN",
-    "贯穿城市的一组公园，把喷泉、池塘、运动场和植物园串成一条绿色走廊。",
-    ["公园", "绿轴", "休闲"],
-    [fact("定位", "城市绿肺"), fact("主力", "公园与花园"), fact("氛围", "树叶与水声")],
-    {
-      accent: "#9fd06d",
-      ground: "#7c9d59",
-      samples: ["b-cottage", "b-cafe"],
-      families: [],
-      props: ["s-bench", "s-planter", "s-lamp"],
-      parkType: "p-fountain",
-    }
-  ),
-  district(
-    "commercial",
-    "商业街区",
-    "COMMERCIAL STRIP",
-    "百货、办公室和旅馆沿街排列，招牌一盏接一盏亮到深夜。",
-    ["商业", "街墙", "人流"],
-    [fact("定位", "中心外环"), fact("主力", "百货与办公"), fact("氛围", "招牌与橱窗")],
-    {
-      accent: "#f1c96b",
-      ground: "#c8bea8",
-      samples: ["b-department", "b-office", "b-hotel", "b-cafe"],
-      families: ["commercial", "office", "leisure"],
-      props: ["s-billboard", "s-kiosk", "s-busstop", "s-bench"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "amusement",
-    "游乐区",
-    "AMUSEMENT DISTRICT",
-    "摩天轮、旋转木马和条纹帐篷占据的城市角落，夜里灯串会比星星先亮。",
-    ["游乐", "摩天轮", "节庆"],
-    [fact("定位", "东南街区"), fact("主力", "游乐设施"), fact("氛围", "彩灯与音乐")],
-    {
-      accent: "#e8735f",
-      ground: "#c9b28d",
-      samples: ["b-cafe", "b-diner", "b-arcade"],
-      families: ["leisure", "commercial"],
-      props: ["s-billboard", "s-kiosk", "s-planter"],
-      parkType: "p-pocket",
-    }
-  ),
-  district(
-    "construction",
-    "建设新区",
-    "CONSTRUCTION ZONE",
-    "围挡后面，新的塔楼正在从土里长出来。塔吊和安全网是这里最显眼的天际线。",
-    ["建设", "塔吊", "未完工"],
-    [fact("定位", "工业区边缘"), fact("主力", "工地与塔吊"), fact("氛围", "尘土与生长")],
-    {
-      accent: "#d98f57",
-      ground: "#9c8463",
-      samples: [],
-      families: [],
-      props: ["s-billboard", "s-bin"],
-      parkType: "p-pocket",
-    }
-  ),
-];
-
 const park = (id, name, en, description, tags, facts, model) => ({
   id: `p-${id}`,
   group: "parks",
@@ -1871,24 +1659,57 @@ const maritimeAssets = [
   ),
 ];
 
+// ---- Catalogue editions --------------------------------------------------
+//
+// Every archive object is stored twice: the original build (… · 1) and a
+// re-styled second edition (… · 2) authored in `src/catalog-variants/`.
+// These paired copies are catalogue-only: BUILDINGS / SKYSCRAPERS / VEHICLES /
+// … below keep exporting the untouched base assets, so the procedural city,
+// its plan and its record labels stay exactly as before.
+
+const asFirstEdition = (base) => ({
+  ...base,
+  name: `${base.name} · 1`,
+  en: `${base.en} · 1`,
+  variantOf: base.id,
+  variantIndex: 1,
+});
+
+const asSecondEdition = (base, spec) => {
+  if (!spec) throw new Error(`[catalog] missing second edition spec for ${base.id}`);
+  return {
+    ...base,
+    id: `${base.id}-2`,
+    name: `${base.name} · 2`,
+    en: `${base.en} · 2`,
+    description: spec.description,
+    tags: spec.tags,
+    facts: spec.facts,
+    model: { ...base.model, ...spec.model },
+    variantOf: base.id,
+    variantIndex: 2,
+  };
+};
+
+const pairEditions = (assets, variants) =>
+  assets.flatMap((base) => [asFirstEdition(base), asSecondEdition(base, variants[base.id])]);
+
 export const ASSETS = [
-  ...buildingAssets,
-  ...skyscraperAssets,
-  ...constructionAssets,
-  ...districtAssets,
-  ...parkAssets,
-  ...attractionAssets,
-  ...vehicleAssets,
-  ...streetAssets,
-  ...natureAssets,
-  ...maritimeAssets,
+  ...pairEditions(buildingAssets, VARIANTS.buildings),
+  ...pairEditions(skyscraperAssets, VARIANTS.skyscrapers),
+  ...pairEditions(constructionAssets, VARIANTS.construction),
+  ...pairEditions(parkAssets, VARIANTS.parks),
+  ...pairEditions(attractionAssets, VARIANTS.attractions),
+  ...pairEditions(vehicleAssets, VARIANTS.vehicles),
+  ...pairEditions(streetAssets, VARIANTS.street),
+  ...pairEditions(natureAssets, VARIANTS.nature),
+  ...pairEditions(maritimeAssets, VARIANTS.maritime),
 ];
 
 export const ASSET_BY_ID = new Map(ASSETS.map((asset) => [asset.id, asset]));
 export const BUILDINGS = buildingAssets;
 export const SKYSCRAPERS = skyscraperAssets;
 export const CONSTRUCTION = constructionAssets;
-export const DISTRICTS = districtAssets;
 export const PARKS = parkAssets;
 export const ATTRACTIONS = attractionAssets;
 export const VEHICLES = vehicleAssets;
@@ -1903,7 +1724,6 @@ export const VEHICLES_BY_ID = new Map(VEHICLES.map((asset) => [asset.id, asset])
 export const STREET_PROPS_BY_ID = new Map(STREET_PROPS.map((asset) => [asset.id, asset]));
 export const NATURE_BY_ID = new Map(NATURE.map((asset) => [asset.id, asset]));
 export const PARKS_BY_ID = new Map(PARKS.map((asset) => [asset.id, asset]));
-export const DISTRICTS_BY_ID = new Map(DISTRICTS.map((asset) => [asset.id, asset]));
 
 export const BUILDINGS_BY_FAMILY = BUILDING_FAMILIES.reduce((grouped, family) => {
   grouped[family.id] = BUILDINGS.filter((asset) => asset.family === family.id);
@@ -1918,27 +1738,3 @@ export function getGroupAssets(groupId) {
   return groupId === "all" ? ASSETS : ASSETS.filter((asset) => asset.group === groupId);
 }
 
-export const CITY_DISTRICT_LAYOUT = [
-  ["oldtown", "residential", "green", "residential", "academic"],
-  ["oldtown", "creative", "commercial", "civic", "academic"],
-  ["residential", "commercial", "downtown", "commercial", "harbor"],
-  ["green", "civic", "residential", "creative", "industrial"],
-  ["green", "green", "harbor", "industrial", "industrial"],
-];
-
-export function transformDistrictLayout(layout, quarterTurns = 0, mirror = false) {
-  let result = layout.map((row) => [...row]);
-  if (mirror) result = result.map((row) => row.slice().reverse());
-  const turns = ((quarterTurns % 4) + 4) % 4;
-  for (let turn = 0; turn < turns; turn += 1) {
-    const size = result.length;
-    const rotated = Array.from({ length: size }, () => Array(size).fill(null));
-    for (let row = 0; row < size; row += 1) {
-      for (let col = 0; col < size; col += 1) {
-        rotated[col][size - 1 - row] = result[row][col];
-      }
-    }
-    result = rotated;
-  }
-  return result;
-}

@@ -111,9 +111,6 @@ function updateStaticCounts() {
   document.querySelectorAll("[data-building-count]").forEach((node) => {
     node.textContent = String(groupCounts.get("buildings") ?? 0);
   });
-  document.querySelectorAll("[data-district-count]").forEach((node) => {
-    node.textContent = String(groupCounts.get("districts") ?? 0);
-  });
   const catalogueCode = document.querySelector("#catalogueCode");
   if (catalogueCode) catalogueCode.textContent = `PB–${pad(total, 3)}`;
   heroCount.textContent = String(total);
@@ -428,6 +425,23 @@ function showNotice(message) {
   archiveNotice.textContent = message;
 }
 
+function handleDeepLink() {
+  const assetId = new URLSearchParams(window.location.search).get("asset");
+  if (!assetId) return;
+  const card = cardNodes.get(assetId);
+  const asset = ASSETS.find((item) => item.id === assetId);
+  if (!card || !asset) return;
+  window.setTimeout(() => {
+    card.scrollIntoView({
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+      block: "center",
+    });
+    card.classList.add("is-target");
+    window.setTimeout(() => card.classList.remove("is-target"), 3400);
+    openInspector(asset, card);
+  }, 280);
+}
+
 function finishArchive(failures, fatalMessage = "") {
   updateLoader(total, null);
   loaderProgress.setAttribute("aria-valuenow", String(total));
@@ -439,6 +453,7 @@ function finishArchive(failures, fatalMessage = "") {
     );
   }
   flagAction(true);
+  handleDeepLink();
   window.requestAnimationFrame(() => {
     loader.classList.add("is-done");
     window.setTimeout(() => {

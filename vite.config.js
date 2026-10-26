@@ -7,6 +7,7 @@ export default defineConfig({
       input: {
         city: fileURLToPath(new URL("./index.html", import.meta.url)),
         catalog: fileURLToPath(new URL("./catalog.html", import.meta.url)),
+        compositions: fileURLToPath(new URL("./compositions.html", import.meta.url)),
       },
     },
   },

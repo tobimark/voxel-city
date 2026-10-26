@@ -1,5 +1,4 @@
 import * as THREE from "three";
-import { ASSET_BY_ID, BUILDINGS_BY_ID, PARKS_BY_ID } from "./object-catalog.js";
 
 const TAU = Math.PI * 2;
 const FLOOR = 0.24;
@@ -2074,271 +2073,6 @@ function buildBuilding(asset, kit, rng, options = {}) {
   return group;
 }
 
-const DISTRICT_SLOTS = {
-  downtown: [
-    [-0.88, -0.72, 0.18],
-    [0.76, -0.84, -0.16],
-    [-0.88, 0.56, 0.42],
-    [0.78, 0.5, -0.36],
-  ],
-  oldtown: [
-    [-0.94, -0.55, 0.1],
-    [-0.05, -0.68, 0.04],
-    [0.88, -0.42, -0.2],
-    [-0.62, 0.52, 0.46],
-  ],
-  harbor: [
-    [-0.94, -0.66, 0.02],
-    [-0.02, -0.86, 0.18],
-    [0.62, -0.58, -0.28],
-    [-0.58, 0.42, 0.38],
-  ],
-  creative: [
-    [-0.84, -0.66, 0.2],
-    [0.8, -0.7, -0.2],
-    [-0.82, 0.5, 0.34],
-    [0.82, 0.54, -0.32],
-  ],
-  residential: [
-    [-0.86, -0.55, 0.08],
-    [0.8, -0.62, -0.18],
-    [-0.82, 0.58, 0.3],
-    [0.84, 0.54, -0.4],
-  ],
-  civic: [
-    [-0.94, -0.68, 0.04],
-    [0.92, -0.62, -0.08],
-    [-0.94, 0.42, 0.4],
-    [0.92, 0.42, -0.4],
-  ],
-  academic: [
-    [-0.9, -0.7, 0.08],
-    [0.12, -0.84, 0.04],
-    [0.94, -0.52, -0.22],
-    [-0.62, 0.5, 0.5],
-  ],
-  industrial: [
-    [-0.95, -0.62, 0.04],
-    [0.1, -0.82, 0.14],
-    [0.94, -0.5, -0.2],
-    [-0.55, 0.42, 0.42],
-  ],
-  green: [
-    [-0.94, -0.56, 0.08],
-    [0.94, -0.48, -0.2],
-  ],
-  commercial: [
-    [-0.96, -0.56, 0.08],
-    [-0.08, -0.7, 0.02],
-    [0.78, -0.46, -0.22],
-    [0.94, 0.46, -0.4],
-  ],
-};
-
-const DISTRICT_PARKS = {
-  downtown: [0.02, 0.1, 0.28],
-  oldtown: [0.34, 0.58, 0.26],
-  harbor: [-0.36, 0.6, 0.25],
-  creative: [0.04, 0.08, 0.24],
-  residential: [0.0, 0.1, 0.3],
-  civic: [0.0, 0.06, 0.38],
-  academic: [0.16, 0.16, 0.34],
-  industrial: [0.18, 0.66, 0.23],
-  green: [0.0, 0.0, 0.52],
-  commercial: [0.02, 0.58, 0.24],
-};
-
-const DISTRICT_ROAD = new Set([
-  "downtown",
-  "oldtown",
-  "harbor",
-  "creative",
-  "civic",
-  "industrial",
-  "commercial",
-]);
-
-function buildDistrict(asset, kit, rng, seed) {
-  const model = asset.model;
-  const district = model.district;
-  const accent = model.accent;
-  const group = new THREE.Group();
-  const tile = 3.3;
-
-  kit.box(group, tile, 0.12, tile, kit.material(model.ground, { roughness: 1 }), 0, 0.06, 0, {
-    outline: true,
-  });
-  kit.box(group, tile, 0.018, tile, kit.material(model.ground, { roughness: 1 }), 0, 0.129, 0);
-
-  const edgeMat = kit.material("#b7ae99", { roughness: 0.95 });
-  for (const side of [-1, 1]) {
-    kit.box(group, tile, 0.025, 0.16, edgeMat, 0, 0.14, side * (tile / 2 - 0.08));
-    kit.box(group, 0.16, 0.025, tile, edgeMat, side * (tile / 2 - 0.08), 0.14, 0);
-  }
-
-  if (DISTRICT_ROAD.has(district)) {
-    kit.box(group, tile, 0.02, 0.52, kit.asphalt, 0, 0.14, tile / 2 - 0.38);
-    kit.box(group, tile, 0.012, 0.06, kit.material("#c9bda2"), 0, 0.152, tile / 2 - 0.38);
-    for (let dash = -2; dash <= 2; dash += 1) {
-      kit.box(group, 0.22, 0.012, 0.03, kit.basic("#d8c9a4"), dash * 0.62, 0.153, tile / 2 - 0.38);
-    }
-    kit.box(group, tile, 0.018, 0.2, kit.material("#c7bca4"), 0, 0.145, tile / 2 - 0.75);
-  } else {
-    kit.box(group, tile, 0.018, 0.26, kit.path, 0, 0.145, tile / 2 - 0.5);
-  }
-
-  if (district === "harbor") {
-    kit.box(group, 0.56, 0.03, tile, kit.water, tile / 2 - 0.31, 0.145, 0);
-    for (let wave = -2; wave <= 2; wave += 1) {
-      kit.box(group, 0.2, 0.008, 0.02, kit.basic("#cfeae1"), tile / 2 - 0.31, 0.165, wave * 0.6);
-    }
-    for (let plank = -3; plank <= 3; plank += 1) {
-      kit.box(group, 0.52, 0.025, 0.1, kit.wood, tile / 2 - 0.46, 0.19, plank * 0.2);
-    }
-    for (let post = -3; post <= 3; post += 2) {
-      kit.cyl(group, 0.022, 0.2, kit.darkMetal, tile / 2 - 0.7, 0.11, post * 0.2);
-    }
-  }
-
-  if (district === "industrial") {
-    for (let pipe = 0; pipe < 3; pipe += 1) {
-      kit.cyl(group, 0.024, 0.7, kit.material("#7b817c"), -1.2 + pipe * 0.18, 0.19, -1.2, {
-        rz: Math.PI / 2,
-      });
-    }
-  }
-
-  if (district === "construction") {
-    const placements = [
-      ["c-skeleton", -0.58, -0.1, 0.33, 0.18],
-      ["c-crane", 0.62, -0.72, 0.34, -0.22],
-      ["c-excavator", 0.6, 0.72, 0.28, -0.45],
-      ["c-fence", 0.0, 1.28, 0.3, 0],
-    ];
-    placements.forEach(([id, x, z, scale, rotation]) => {
-      const constructionAsset = ASSET_BY_ID.get(id);
-      if (!constructionAsset) return;
-      const modelGroup = createShowcaseModel(constructionAsset, {
-        kit,
-        seed: `${seed ?? ""}:${asset.id}:${id}`,
-      });
-      modelGroup.scale.setScalar(scale);
-      modelGroup.position.set(x, 0.14, z);
-      modelGroup.rotation.y = rotation;
-      group.add(modelGroup);
-    });
-    kit.box(group, 1.6, 0.03, 0.26, kit.material("#7f6c54"), 0, 0.145, 0.44);
-    return group;
-  }
-
-  const samples = (model.samples ?? [])
-    .map((id) => ASSET_BY_ID.get(id) ?? BUILDINGS_BY_ID.get(id))
-    .filter(Boolean)
-    .slice(0, 4);
-  const slots = DISTRICT_SLOTS[district] ?? DISTRICT_SLOTS.commercial;
-
-  samples.forEach((buildingAsset, index) => {
-    const slot = slots[index % slots.length];
-    const buildingSeed = hashSeed(`${seed ?? ""}:${asset.id}:${buildingAsset.id}:${index}`);
-    const buildingRng = mulberry32(buildingSeed);
-    const mini = buildBuilding(buildingAsset, kit, buildingRng, { mini: true });
-    const scale = rand(buildingRng, 0.27, 0.33) * (district === "green" ? 0.9 : 1);
-    mini.scale.setScalar(scale);
-    mini.position.set(slot[0], 0.14, slot[1]);
-    mini.rotation.y = slot[2];
-    group.add(mini);
-  });
-
-  if (model.parkType) {
-    const parkAsset = PARKS_BY_ID.get(model.parkType);
-    if (parkAsset) {
-      const park = createShowcaseModel(parkAsset, {
-        kit,
-        seed: `${seed ?? ""}:${asset.id}:park`,
-      });
-      const placement = DISTRICT_PARKS[district] ?? [0, 0, 0.25];
-      park.scale.setScalar(placement[2]);
-      park.position.set(placement[0], 0.14, placement[1]);
-      group.add(park);
-    }
-  }
-
-  (model.props ?? []).slice(0, 4).forEach((propId, index) => {
-    const propAsset = ASSET_BY_ID.get(propId);
-    if (!propAsset) return;
-    const prop = createShowcaseModel(propAsset, {
-      kit,
-      seed: `${seed ?? ""}:${asset.id}:${propId}:${index}`,
-    });
-    const positions = [
-      [-1.22, 1.12],
-      [1.14, 1.06],
-      [-1.26, -1.15],
-      [1.2, -1.15],
-    ];
-    const position = positions[index % positions.length];
-    prop.scale.setScalar(0.3);
-    prop.position.set(position[0], 0.14, position[1]);
-    prop.rotation.y = (index % 2 === 0 ? 1 : -1) * Math.PI * 0.2;
-    group.add(prop);
-  });
-
-  const treeKind =
-    district === "residential" || district === "green" || district === "academic"
-      ? "broadleaf"
-      : district === "harbor"
-        ? "palm"
-        : "broadleaf";
-  const treeSpots =
-    district === "green"
-      ? [
-          [-1.1, -0.9],
-          [1.05, -0.8],
-          [-0.8, 1.0],
-          [0.9, 1.06],
-          [1.25, 0.1],
-        ]
-      : [
-          [-1.18, 0.3],
-          [1.15, -0.25],
-        ];
-  treeSpots.forEach(([x, z], index) => {
-    addTree(kit, group, {
-      x,
-      z,
-      scale: 0.42 + (index % 2) * 0.08,
-      kind: treeKind,
-      leaf: district === "civic" ? "#7fa866" : "#6b9b53",
-      leaf2: district === "civic" ? "#93b76f" : "#7eab5c",
-      trunk: "#6f4e37",
-    });
-  });
-
-  if (district === "downtown") {
-    kit.box(group, 0.9, 0.018, 0.9, kit.material("#d9cfb8"), 0, 0.145, 0.1);
-    kit.box(group, 0.65, 0.018, 0.65, kit.material("#c9bda4"), 0, 0.15, 0.1);
-  }
-  if (district === "oldtown") {
-    for (let stone = 0; stone < 5; stone += 1) {
-      kit.box(group, 0.12, 0.01, 0.18, kit.material("#c9b28d"), -1.0 + stone * 0.5, 0.143, 0.92);
-    }
-  }
-  if (district === "creative") {
-    kit.box(group, 0.28, 0.16, 0.04, kit.glow(accent), -0.18, 0.52, 0.8);
-    kit.box(group, 0.28, 0.16, 0.04, kit.glow("#72cec0"), 0.18, 0.52, 0.8);
-  }
-  if (district === "industrial") {
-    kit.box(group, 0.16, 0.3, 0.16, kit.material("#7f847d"), 1.24, 0.29, -1.2);
-    kit.box(group, 0.1, 0.2, 0.1, kit.material("#6e746f"), 1.24, 0.54, -1.2);
-  }
-  if (district === "harbor") {
-    kit.cyl(group, 0.025, 0.48, kit.darkMetal, 1.3, 0.44, 1.2);
-    kit.box(group, 0.12, 0.04, 0.12, kit.glow("#ffd18a"), 1.3, 0.7, 1.2);
-  }
-
-  return group;
-}
-
 function buildPark(asset, kit, rng) {
   const model = asset.model;
   const accent = model.accent;
@@ -2750,7 +2484,7 @@ function buildStreetProp(asset, kit, rng) {
 
   if (prop === "lamp") {
     pad(0.8);
-    addLamp(kit, group, { y: 0.035, height: 0.9, color, light: accent });
+    addLamp(kit, group, { y: 0.035, height: model.height ?? 0.9, color, light: accent });
   } else if (prop === "bench") {
     pad(1.0, "#82877b");
     addBench(kit, group, { y: 0.035, color, ry: 0.15 });
@@ -2759,14 +2493,14 @@ function buildStreetProp(asset, kit, rng) {
     const shelter = new THREE.Group();
     shelter.position.set(-0.16, 0.035, 0);
     group.add(shelter);
-    kit.box(shelter, 0.76, 0.035, 0.34, kit.material("#5a6668"), 0, 0.42, -0.06, { outline: true });
+    kit.box(shelter, 0.76, 0.035, 0.34, kit.material(model.frame ?? "#5a6668"), 0, 0.42, -0.06, { outline: true });
     for (const x of [-0.35, 0.35]) {
       kit.box(shelter, 0.03, 0.42, 0.03, kit.darkMetal, x, 0.21, 0.1);
       kit.box(shelter, 0.03, 0.42, 0.03, kit.darkMetal, x, 0.21, -0.2);
     }
     kit.box(shelter, 0.7, 0.3, 0.015, kit.glass("#b9d2d0", 0.35), 0, 0.24, -0.22);
     kit.box(shelter, 0.015, 0.3, 0.28, kit.glass("#b9d2d0", 0.35), 0.36, 0.24, -0.06);
-    addBench(kit, shelter, { x: 0, z: -0.02, y: 0.03, ry: 0 });
+    addBench(kit, shelter, { x: 0, z: -0.02, y: 0.03, ry: 0, color: model.seat ?? "#6f5541" });
     kit.box(shelter, 0.12, 0.22, 0.02, kit.glow(accent), -0.28, 0.26, 0.16);
     kit.box(shelter, 0.03, 0.22, 0.03, kit.darkMetal, 0.38, 0.11, 0.16);
     kit.box(shelter, 0.14, 0.04, 0.04, kit.glow(accent), 0.38, 0.38, 0.16);
@@ -2802,9 +2536,10 @@ function buildStreetProp(asset, kit, rng) {
   } else if (prop === "statue") {
     pad(1.0, "#898e81");
     kit.box(group, 0.42, 0.08, 0.42, kit.stone, 0, 0.07, 0, { outline: true });
-    kit.box(group, 0.32, 0.12, 0.32, kit.material("#b7ac95"), 0, 0.17, 0, { outline: true });
-    kit.box(group, 0.24, 0.5, 0.24, kit.material("#b7ac95"), 0, 0.48, 0, { outline: true });
-    const bronze = kit.material("#6d8178", { roughness: 0.62, metalness: 0.22 });
+    const pedestalMat = kit.material(model.accent ?? "#b7ac95");
+    kit.box(group, 0.32, 0.12, 0.32, pedestalMat, 0, 0.17, 0, { outline: true });
+    kit.box(group, 0.24, 0.5, 0.24, pedestalMat, 0, 0.48, 0, { outline: true });
+    const bronze = kit.material(model.color ?? "#6d8178", { roughness: 0.62, metalness: 0.22 });
     kit.box(group, 0.22, 0.3, 0.16, bronze, 0, 0.82, 0);
     kit.sphere(group, 0.075, bronze, 0, 1.01, 0);
     kit.box(group, 0.06, 0.22, 0.08, bronze, 0.14, 0.84, 0.01, { rz: -0.5 });
@@ -2821,13 +2556,22 @@ function buildStreetProp(asset, kit, rng) {
       kit.box(group, 0.08, 0.03, 0.14, kit.darkMetal, x, 0.04, -0.02);
     }
     kit.box(group, 1.02, 0.62, 0.06, kit.material("#313941"), 0, 0.72, -0.02, { outline: true });
+    const panelColors = model.panels ?? ["#ef816c", "#ffd166", "#72cec0"];
     for (let panel = 0; panel < 3; panel += 1) {
-      const colors = ["#ef816c", "#ffd166", "#72cec0"];
-      kit.box(group, 0.28, 0.5, 0.025, kit.basic(colors[panel]), -0.32 + panel * 0.32, 0.72, 0.02);
+      kit.box(
+        group,
+        0.28,
+        0.5,
+        0.025,
+        kit.basic(panelColors[panel % panelColors.length]),
+        -0.32 + panel * 0.32,
+        0.72,
+        0.02
+      );
       kit.box(group, 0.2, 0.02, 0.03, kit.basic("#f4e4c1"), -0.32 + panel * 0.32, 0.62, 0.04);
     }
     for (const side of [-1, 1]) {
-      kit.box(group, 0.06, 0.045, 0.05, kit.glow("#ffe2a1"), side * 0.55, 1.03, -0.02);
+      kit.box(group, 0.06, 0.045, 0.05, kit.glow(model.light ?? "#ffe2a1"), side * 0.55, 1.03, -0.02);
     }
     for (let rung = 0; rung < 4; rung += 1) {
       kit.box(group, 0.26, 0.02, 0.02, kit.steel, 0, 0.18 + rung * 0.16, -0.12);
@@ -2838,7 +2582,7 @@ function buildStreetProp(asset, kit, rng) {
       kit.rack(group, 0.22, kit.material(accent, { metalness: 0.35, roughness: 0.4 }), -0.32 + rack * 0.32, 0.04, 0);
     }
     for (const wheel of [-0.4, -0.16]) {
-      kit.torus(group, 0.09, kit.material("#2f3539"), wheel, 0.13, 0.2);
+      kit.torus(group, 0.09, kit.material(model.wheel ?? "#2f3539"), wheel, 0.13, 0.2);
     }
     kit.box(group, 0.24, 0.012, 0.012, accentMat, -0.28, 0.16, 0.2, { rz: 0.35 });
     kit.box(group, 0.12, 0.012, 0.012, accentMat, -0.34, 0.18, 0.2, { rz: -0.6 });
@@ -5192,6 +4936,8 @@ function buildConstruction(asset, kit, rng) {
 
   if (type === "crane") {
     const mastHeight = 3.8;
+    // `length` lets the "· 2" edition stretch or shorten the jib; base = 2.8.
+    const armScale = Math.max(0.55, (model.length ?? 2.8) / 2.8);
     kit.box(group, 0.9, 0.06, 0.9, kit.material("#89857a"), 0, 0.03, 0, { outline: true });
     kit.box(group, 0.1, mastHeight, 0.1, yellow, 0, 0.06 + mastHeight / 2, 0, { outline: true });
     for (let brace = 0; brace < 8; brace += 1) {
@@ -5199,14 +4945,14 @@ function buildConstruction(asset, kit, rng) {
         rz: brace % 2 === 0 ? 0.65 : -0.65,
       });
     }
-    kit.box(group, 2.8, 0.07, 0.07, yellow, 1.08, mastHeight + 0.08, 0, { outline: true });
-    kit.box(group, 0.85, 0.07, 0.09, yellow, -0.55, mastHeight + 0.08, 0);
-    kit.box(group, 0.32, 0.34, 0.32, dark, -0.87, mastHeight - 0.08, 0, { outline: true });
+    kit.box(group, 2.8 * armScale, 0.07, 0.07, yellow, 1.08 * armScale, mastHeight + 0.08, 0, { outline: true });
+    kit.box(group, 0.85 * armScale, 0.07, 0.09, yellow, -0.55 * armScale, mastHeight + 0.08, 0);
+    kit.box(group, 0.32, 0.34, 0.32, dark, -0.87 * armScale, mastHeight - 0.08, 0, { outline: true });
     kit.box(group, 0.05, 0.54, 0.05, yellow, 0, mastHeight + 0.35, 0);
-    kit.box(group, 0.8, 0.035, 0.035, yellow, 0.28, mastHeight + 0.35, 0);
-    kit.box(group, 0.5, 0.035, 0.035, yellow, -0.26, mastHeight + 0.35, 0);
-    kit.box(group, 0.012, 1.25, 0.012, dark, 2.05, mastHeight - 0.5, 0);
-    kit.box(group, 0.12, 0.12, 0.12, dark, 2.05, mastHeight - 1.12, 0, { outline: true });
+    kit.box(group, 0.8 * armScale, 0.035, 0.035, yellow, 0.28 * armScale, mastHeight + 0.35, 0);
+    kit.box(group, 0.5 * armScale, 0.035, 0.035, yellow, -0.26 * armScale, mastHeight + 0.35, 0);
+    kit.box(group, 0.012, 1.25, 0.012, dark, 2.05 * armScale, mastHeight - 0.5, 0);
+    kit.box(group, 0.12, 0.12, 0.12, dark, 2.05 * armScale, mastHeight - 1.12, 0, { outline: true });
     kit.box(group, 0.035, 0.035, 0.035, warn, 0, mastHeight + 0.65, 0);
     kit.box(group, 1.1, 0.05, 0.7, kit.material("#8b765b"), -0.4, 0.05, 0.9, { outline: true });
     kit.box(group, 0.34, 0.24, 0.3, kit.material("#947452"), 0.2, 0.17, 0.9, { outline: true });
@@ -5296,8 +5042,9 @@ function buildConstruction(asset, kit, rng) {
     kit.box(group, 1.9, 0.035, 1.5, kit.material("#9c8463"), 0, 0.018, 0, { outline: true });
     concretePile(-0.52, -0.35, 0.4, 0.3);
     concretePile(0.35, -0.2, 0.28, 0.22);
+    const pipeMat = model.pipe ? kit.material(model.pipe, { roughness: 0.5, metalness: 0.3 }) : kit.steel;
     for (let pipe = 0; pipe < 3; pipe += 1) {
-      kit.cyl(group, 0.075, 1.25, kit.steel, 0.2, 0.08 + pipe * 0.13, 0.45, {
+      kit.cyl(group, 0.075, 1.25, pipeMat, 0.2, 0.08 + pipe * 0.13, 0.45, {
         rz: Math.PI / 2,
       });
     }
@@ -5449,6 +5196,7 @@ function buildAttraction(asset, kit, rng) {
     }
   } else if (attraction === "tent") {
     const radius = model.radius ?? 0.7;
+    const tentStripe = model.stripe ? kit.material(model.stripe, { roughness: 0.9 }) : cream;
     kit.cyl(group, radius * 1.3, 0.06, kit.path, 0, 0.03, 0, { segments: 10 });
     kit.cyl(group, radius, 0.5, cream, 0, 0.3, 0, { segments: 8 });
     for (let stripe = 0; stripe < 8; stripe += 2) {
@@ -5473,7 +5221,7 @@ function buildAttraction(asset, kit, rng) {
         radius * 1.1,
         0.5,
         0.035,
-        cream,
+        tentStripe,
         Math.cos(angle) * radius * 0.55,
         0.8,
         Math.sin(angle) * radius * 0.55,
@@ -5503,7 +5251,7 @@ function buildAttraction(asset, kit, rng) {
     kit.cyl(group, 0.1, 0.5, kit.material("#e8735f"), 0.6, 0.24, 0.65);
     kit.cone(group, 0.26, 0.18, cream, 0.6, 0.49, 0.65);
   } else if (attraction === "gazebo") {
-    kit.cyl(group, 0.9, 0.08, kit.wood, 0, 0.04, 0, { segments: 8 });
+    kit.cyl(group, 0.9, 0.08, kit.material(model.deck ?? "#8a6a4d", { roughness: 0.9 }), 0, 0.04, 0, { segments: 8 });
     kit.cyl(group, 0.8, 0.035, kit.path, 0, 0.1, 0, { segments: 8 });
     for (let post = 0; post < 6; post += 1) {
       const angle = (post / 6) * TAU;
@@ -5542,9 +5290,6 @@ export function createShowcaseModel(asset, options = {}) {
       break;
     case "construction":
       group = buildConstruction(asset, kit, rng);
-      break;
-    case "district":
-      group = buildDistrict(asset, kit, rng, `${seed}`);
       break;
     case "park":
       group = buildPark(asset, kit, rng);
